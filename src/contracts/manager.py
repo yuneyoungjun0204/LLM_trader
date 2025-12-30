@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from src.logger.logger import Logger
 from src.platforms.ai_providers.openrouter import ResponseDict
-from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, LMStudioClient
+from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, LMStudioClient, OllamaClient
 from src.utils.token_counter import TokenCounter
 from src.contracts.manager_factory import ModelManagerProtocol
 from src.factories import ProviderFactory
@@ -44,6 +44,7 @@ class ModelManager(ModelManagerProtocol):
         self.google_client: Optional[GoogleAIClient] = clients['google']
         self.google_paid_client: Optional[GoogleAIClient] = clients['google_paid']
         self.lm_studio_client: Optional[LMStudioClient] = clients['lmstudio']
+        self.ollama_client: Optional[OllamaClient] = clients['ollama']
 
         # Create helper components - use injected parser
         self.unified_parser = unified_parser
@@ -53,11 +54,28 @@ class ModelManager(ModelManagerProtocol):
         self.google_model = self.config.GOOGLE_STUDIO_MODEL
         self.openrouter_model = self.config.OPENROUTER_BASE_MODEL
         self.lmstudio_model = self.config.LM_STUDIO_MODEL
+        self.ollama_main_model = self.config.OLLAMA_MAIN_MODEL
+        self.ollama_math_model = self.config.OLLAMA_MATH_MODEL
+        self.ollama_reasoning_model = self.config.OLLAMA_REASONING_MODEL
+        self.ollama_summary_model = self.config.OLLAMA_SUMMARY_MODEL
 
         # Create model configurations as instance variables
         self.model_config = self.config.get_model_config(self.lmstudio_model)
         self.google_config = self.config.get_model_config(self.google_model)
         self.openrouter_config = self.config.get_model_config(self.openrouter_model)
+        self.ollama_main_config = self.config.get_model_config(self.ollama_main_model, {'temperature': 0.3, 'top_p': 0.9})
+        self.ollama_math_config = self.config.get_model_config(self.ollama_math_model, {'temperature': 0.1, 'top_p': 0.9})
+        self.ollama_reasoning_config = self.config.get_model_config(self.ollama_reasoning_model, {'temperature': 0.4, 'top_p': 0.9})
+        self.ollama_summary_config = self.config.get_model_config(self.ollama_summary_model, {'temperature': 0.7, 'top_p': 0.9})
+
+        # Task-based model mapping for Ollama
+        # Different models optimized for different trading analysis tasks
+        self.OLLAMA_TASK_MODELS = {
+            'main_analysis': (self.ollama_main_model, self.ollama_main_config),           # Qwen2.5 14B - comprehensive trading analysis
+            'technical_calc': (self.ollama_math_model, self.ollama_math_config),          # Qwen2-Math 7B - technical indicators & calculations
+            'pattern_reasoning': (self.ollama_reasoning_model, self.ollama_reasoning_config),  # DeepSeek-R1 7B - pattern recognition & strategy
+            'news_summary': (self.ollama_summary_model, self.ollama_summary_config)       # Llama 3.1 8B - fast news summarization
+        }
 
         # Provider metadata - single source of truth for provider information
         # This eliminates duplicate provider name mappings and model lookups throughout the class
@@ -76,7 +94,7 @@ class ModelManager(ModelManagerProtocol):
                 'client': self.openrouter_client,
                 'default_model': self.openrouter_model,
                 'config': self.openrouter_config,
-                'supports_chart': True,
+                'supports_chart': False,  # Disabled: free models don't support image analysis reliably
                 'has_rate_limits': True
             },
             'local': {
@@ -86,12 +104,23 @@ class ModelManager(ModelManagerProtocol):
                 'config': self.model_config,
                 'supports_chart': False,
                 'has_rate_limits': False
+            },
+            'ollama': {
+                'name': 'Ollama',
+                'client': self.ollama_client,
+                'default_model': self.ollama_main_model,
+                'config': self.ollama_main_config,
+                'supports_chart': False,
+                'has_rate_limits': False,
+                'task_based': True  # Supports task-based model selection
             }
         }
 
         # Set up models and their configurations
         if self.provider == "local":
             self.model = self.lmstudio_model
+        elif self.provider == "ollama":
+            self.model = self.ollama_main_model
         else:
             self.model = self.openrouter_model
 
@@ -104,6 +133,8 @@ class ModelManager(ModelManagerProtocol):
             await self.google_paid_client.__aenter__()
         if self.lm_studio_client:
             await self.lm_studio_client.__aenter__()
+        if self.ollama_client:
+            await self.ollama_client.__aenter__()
         return self
 
     async def __aexit__(self, _exc_type, _exc_val, _exc_tb):
@@ -117,34 +148,38 @@ class ModelManager(ModelManagerProtocol):
 
             if self.google_client:
                 await self.google_client.close()
-            
+
             if self.google_paid_client:
                 await self.google_paid_client.close()
 
             if self.lm_studio_client:
                 await self.lm_studio_client.close()
 
+            if self.ollama_client:
+                await self.ollama_client.close()
+
             self.logger.debug("All model clients closed successfully")
         except Exception as e:
             self.logger.error(f"Error during model manager cleanup: {e}")
 
     async def send_prompt(self, prompt: str, system_message: str = None, prepared_messages: List[Dict[str, str]] = None,
-                         provider: Optional[str] = None, model: Optional[str] = None) -> str:
+                         provider: Optional[str] = None, model: Optional[str] = None, task_type: str = 'main_analysis') -> str:
         """
         Send a prompt to the model and get a response.
-        
+
         Args:
             prompt: User prompt
             system_message: Optional system instructions
             prepared_messages: Pre-prepared message list (if None, will be created from prompt)
             provider: Optional provider override (admin only)
             model: Optional model override (admin only)
-            
+            task_type: Task type for Ollama model selection ('main_analysis', 'technical_calc', 'pattern_reasoning', 'news_summary')
+
         Returns:
             Response text from the AI model
         """
         messages = prepared_messages if prepared_messages is not None else self._prepare_messages(prompt, system_message)
-        response_json = await self._get_model_response(messages, provider=provider, model=model)
+        response_json = await self._get_model_response(messages, provider=provider, model=model, task_type=task_type)
         return self._process_response(response_json)
 
     async def send_prompt_streaming(self, prompt: str, system_message: str = None, 
@@ -336,30 +371,36 @@ class ModelManager(ModelManagerProtocol):
             self.logger.error("Local models don't support image analysis")
 
     async def _invoke_provider(self, provider: str, messages: List[Dict[str, str]], *, chart: bool = False,
-                               chart_image: Optional[Union[io.BytesIO, bytes, str]] = None, 
-                               model: Optional[str] = None) -> Dict[str, Any]:
+                               chart_image: Optional[Union[io.BytesIO, bytes, str]] = None,
+                               model: Optional[str] = None, task_type: str = 'main_analysis') -> Dict[str, Any]:
         """
         Invoke a provider for normal or chart analysis requests and return its raw response dict.
-        
+
         Uses PROVIDER_METADATA for client/config lookup and _resolve_model for model resolution.
-        
+
         Args:
-            provider: Provider name (googleai, local, openrouter)
+            provider: Provider name (googleai, local, openrouter, ollama)
             messages: Message list for the AI model
             chart: Whether this is a chart analysis request
             chart_image: Optional chart image data
             model: Optional model override (admin only)
-            
+            task_type: Task type for Ollama model selection
+
         Returns:
             Response dictionary from the provider
         """
         metadata = self.PROVIDER_METADATA.get(provider)
         if not metadata or not metadata['client']:
             return cast(ResponseDict, {"error": f"Provider '{provider}' is not available"})
-        
+
         client = metadata['client']
         config = metadata['config']
         effective_model = self._resolve_model(provider, model)
+
+        # Ollama: Use task-based model selection if no model override
+        if provider == "ollama" and not model and task_type in self.OLLAMA_TASK_MODELS:
+            effective_model, config = self.OLLAMA_TASK_MODELS[task_type]
+            self.logger.info(f"Using Ollama task-based model: {effective_model} for task: {task_type}")
         
         # Google AI has special free/paid tier logic
         if provider == "googleai":
@@ -373,7 +414,16 @@ class ModelManager(ModelManagerProtocol):
                 return await client.chat_completion(effective_model, messages, config)
             except Exception as e:
                 return cast(ResponseDict, {"error": f"LM Studio connection failed: {str(e)}"})
-        
+
+        # Ollama provider - similar to local but with better logging
+        if provider == "ollama":
+            if chart:
+                return cast(ResponseDict, {"error": "Chart analysis unavailable - Ollama models don't support images yet"})
+            try:
+                return await client.chat_completion(effective_model, messages, config)
+            except Exception as e:
+                return cast(ResponseDict, {"error": f"Ollama connection failed: {str(e)}. Is Ollama running on {self.config.OLLAMA_BASE_URL}?"})
+
         # OpenRouter standard flow
         if provider == "openrouter":
             if chart:
@@ -381,7 +431,7 @@ class ModelManager(ModelManagerProtocol):
                     effective_model, messages, cast(Any, chart_image), config
                 )
             return await client.chat_completion(effective_model, messages, config)
-        
+
         return cast(ResponseDict, {"error": f"Provider '{provider}' is not available"})
     
     async def _invoke_google_provider(self, client, messages: List[Dict[str, str]], config: Dict[str, Any],
@@ -443,19 +493,21 @@ class ModelManager(ModelManagerProtocol):
 
     async def _first_success(self, providers: List[str], messages: List[Dict[str, str]], *, chart: bool = False,
                               chart_image: Optional[Union[io.BytesIO, bytes, str]] = None,
-                              model: Optional[str] = None, warn_on_fail: bool = True) -> Dict[str, Any]:
+                              model: Optional[str] = None, warn_on_fail: bool = True, task_type: str = 'main_analysis') -> Dict[str, Any]:
         """Try providers in order, returning the first valid response."""
         for idx, provider in enumerate(providers):
             if not self._provider_available(provider):
                 continue
             self._log_provider_action(provider, action="attempting", chart=chart, model=model)
-            response_json = await self._invoke_provider(provider, messages, chart=chart, chart_image=chart_image, model=model)
+            response_json = await self._invoke_provider(provider, messages, chart=chart, chart_image=chart_image, model=model, task_type=task_type)
             if self._valid_for_provider(provider, response_json):
                 return response_json
             if warn_on_fail:
                 # Keep similar warning tone to existing code
                 if provider == "googleai":
                     self.logger.warning("Google AI Studio model failed. Trying alternatives...")
+                elif provider == "ollama":
+                    self.logger.warning("Ollama failed. Falling back to next provider.")
                 elif provider == "local":
                     self.logger.warning("LM Studio failed. Falling back to next provider.")
                 elif provider == "openrouter":
@@ -509,14 +561,18 @@ class ModelManager(ModelManagerProtocol):
     def supports_image_analysis(self, provider_override: Optional[str] = None) -> bool:
         """Check if the selected provider supports image analysis."""
         provider_name = (provider_override or self.provider or "").lower()
+
+        # Check PROVIDER_METADATA for supports_chart setting
+        if provider_name in self.PROVIDER_METADATA:
+            metadata = self.PROVIDER_METADATA[provider_name]
+            return metadata.get('supports_chart', False) and metadata.get('client') is not None
+
+        # For "all" mode, check if any provider supports chart
         if provider_name == "all":
-            return (self.google_client is not None or self.openrouter_client is not None)
-        if provider_name == "googleai":
-            return self.google_client is not None
-        if provider_name == "openrouter":
-            return self.openrouter_client is not None
-        if provider_name == "local":
-            return False
+            for meta in self.PROVIDER_METADATA.values():
+                if meta.get('supports_chart', False) and meta.get('client') is not None:
+                    return True
+
         return False
 
     def describe_provider_and_model(
@@ -581,76 +637,78 @@ class ModelManager(ModelManagerProtocol):
     
         return messages
 
-    async def _get_model_response(self, messages: List[Dict[str, str]], provider: Optional[str] = None, 
-                                  model: Optional[str] = None) -> Dict[str, Any]:
+    async def _get_model_response(self, messages: List[Dict[str, str]], provider: Optional[str] = None,
+                                  model: Optional[str] = None, task_type: str = 'main_analysis') -> Dict[str, Any]:
         """
         Get response from the selected provider(s).
-        
+
         Args:
             messages: Message list for the AI model
             provider: Optional provider override (admin only)
             model: Optional model override (admin only)
-            
+            task_type: Task type for Ollama model selection
+
         Returns:
             Response dictionary from the AI provider
         """
         # Use admin-specified provider if provided
         effective_provider = provider if provider else self.provider
-        
+
         # If provider is "all", use fallback system (current behavior)
         if effective_provider == "all":
-            return await self._get_fallback_response(messages, model)
-        
+            return await self._get_fallback_response(messages, model, task_type)
+
         # Use single provider only
         if effective_provider in self.PROVIDER_METADATA and self._get_provider_client(effective_provider):
-            return await self._try_single_provider(effective_provider, messages, model)
+            return await self._try_single_provider(effective_provider, messages, model, task_type)
         else:
             # Fallback if provider is misconfigured or client not available
             self.logger.error(f"Provider '{effective_provider}' is not properly configured or client not available")
             self._log_provider_unavailable_guidance(effective_provider)
             return cast(ResponseDict, {"error": f"Provider '{effective_provider}' is not available"})
 
-    async def _get_fallback_response(self, messages: List[Dict[str, str]], model: Optional[str] = None) -> Dict[str, Any]:
+    async def _get_fallback_response(self, messages: List[Dict[str, str]], model: Optional[str] = None, task_type: str = 'main_analysis') -> Dict[str, Any]:
         """Original fallback logic when provider is 'all'"""
-        # Try Google, then LM Studio, then OpenRouter
-        response = await self._first_success(["googleai", "local", "openrouter"], messages, model=model)
+        # Try Google, then Ollama, then LM Studio, then OpenRouter
+        response = await self._first_success(["googleai", "ollama", "local", "openrouter"], messages, model=model, task_type=task_type)
         if self._is_valid_response(response):
             return response
         # If still no success but OpenRouter is available, log the explicit fallback message then try once more
         if self.openrouter_client:
-            return await self._try_openrouter(messages, model)
+            return await self._try_openrouter(messages, model, task_type)
         return response
 
-    async def _try_single_provider(self, provider: str, messages: List[Dict[str, str]], model: Optional[str] = None) -> Dict[str, Any]:
+    async def _try_single_provider(self, provider: str, messages: List[Dict[str, str]], model: Optional[str] = None, task_type: str = 'main_analysis') -> Dict[str, Any]:
         """
         Try a single provider for text analysis.
-        
+
         Consolidated method replacing _try_google_only, _try_lm_studio_only, _try_openrouter_only.
-        
+
         Args:
-            provider: Provider ID (googleai, local, openrouter)
+            provider: Provider ID (googleai, local, openrouter, ollama)
             messages: Message list for the AI model
             model: Optional model override
-            
+            task_type: Task type for Ollama model selection
+
         Returns:
             Response dictionary from the provider
         """
         self._log_provider_action(provider, action="using", model=model)
-        response_json = await self._invoke_provider(provider, messages, model=model)
+        response_json = await self._invoke_provider(provider, messages, model=model, task_type=task_type)
 
         # Check validity with provider-specific rate limit handling
         metadata = self.PROVIDER_METADATA.get(provider, {})
         has_rate_limits = metadata.get('has_rate_limits', False)
-        
+
         if not self._is_valid_response(response_json) or (has_rate_limits and self._rate_limited(response_json)):
             return self._handle_provider_failure(provider, response_json)
 
         return response_json
 
-    async def _try_openrouter(self, messages: List[Dict[str, str]], model: Optional[str] = None) -> Optional[ResponseDict]:
+    async def _try_openrouter(self, messages: List[Dict[str, str]], model: Optional[str] = None, task_type: str = 'main_analysis') -> Optional[ResponseDict]:
         """Use OpenRouter as fallback"""
-        self.logger.warning("Google AI Studio and LM Studio (if enabled) failed. Falling back to OpenRouter...")
-        response_json = await self._invoke_provider("openrouter", messages, model=model)
+        self.logger.warning("All local providers (Google AI Studio, Ollama, LM Studio) failed. Falling back to OpenRouter...")
+        response_json = await self._invoke_provider("openrouter", messages, model=model, task_type=task_type)
 
         if not self._is_valid_response(response_json) or self._rate_limited(response_json):
             return self._handle_provider_failure("openrouter", response_json, is_final_fallback=True)

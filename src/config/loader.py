@@ -239,11 +239,31 @@ class Config:
     @property
     def LM_STUDIO_BASE_URL(self):
         return self.get_config('ai_providers', 'lm_studio_base_url', 'http://localhost:1234/v1')
-    
+
     @property
     def LM_STUDIO_MODEL(self):
         return self.get_config('ai_providers', 'lm_studio_model', 'local-model')
-    
+
+    @property
+    def OLLAMA_BASE_URL(self):
+        return self.get_config('ai_providers', 'ollama_base_url', 'http://localhost:11434/v1')
+
+    @property
+    def OLLAMA_MAIN_MODEL(self):
+        return self.get_config('ai_providers', 'ollama_main_model', 'qwen2.5:14b')
+
+    @property
+    def OLLAMA_MATH_MODEL(self):
+        return self.get_config('ai_providers', 'ollama_math_model', 'qwen2-math:7b')
+
+    @property
+    def OLLAMA_REASONING_MODEL(self):
+        return self.get_config('ai_providers', 'ollama_reasoning_model', 'deepseek-r1:7b')
+
+    @property
+    def OLLAMA_SUMMARY_MODEL(self):
+        return self.get_config('ai_providers', 'ollama_summary_model', 'llama3.1:8b')
+
     @property
     def OPENROUTER_BASE_URL(self):
         return self.get_config('ai_providers', 'openrouter_base_url', 'https://openrouter.ai/api/v1')

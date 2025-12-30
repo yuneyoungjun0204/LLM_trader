@@ -128,10 +128,24 @@ class BaseApiClient:
                     return await self._handle_error_response(response, model)
                 
                 response_json = await response.json()
+
+                # Debug: Log raw response structure
+                self.logger.debug(f"Raw response keys: {list(response_json.keys())}")
+                if "choices" in response_json:
+                    self.logger.debug(f"Choices count: {len(response_json['choices'])}")
+                    if response_json['choices']:
+                        first_choice = response_json['choices'][0]
+                        self.logger.debug(f"First choice keys: {list(first_choice.keys())}")
+                        if "message" in first_choice:
+                            message = first_choice["message"]
+                            self.logger.debug(f"Message keys: {list(message.keys())}")
+                            content_preview = message.get("content", "")[:100] if isinstance(message.get("content"), str) else str(type(message.get("content")))
+                            self.logger.debug(f"Content preview: {content_preview}")
+
                 if "error" in response_json:
                     self.logger.error(f"API returned error payload for model {model}: {response_json['error']}")
                     return response_json
-                    
+
                 self.logger.debug(f"Received successful response for model {model}")
                 return response_json
                     

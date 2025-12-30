@@ -5,21 +5,22 @@ if TYPE_CHECKING:
     from src.config.protocol import ConfigProtocol
 
 from src.logger.logger import Logger
-from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, LMStudioClient
+from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, LMStudioClient, OllamaClient
 
 
 class ProviderFactory:
     """
     Factory for creating AI provider client instances based on configuration.
-    
+
     Centralizes provider instantiation logic and handles API key validation.
-    Supports multiple providers: Google AI Studio (free/paid), OpenRouter, LM Studio (local).
-    
+    Supports multiple providers: Google AI Studio (free/paid), OpenRouter, LM Studio (local), Ollama (local).
+
     Usage:
         factory = ProviderFactory(logger, config)
         google_client, google_paid_client = factory.create_google_clients()
         openrouter_client = factory.create_openrouter_client()
         lmstudio_client = factory.create_lmstudio_client()
+        ollama_client = factory.create_ollama_client()
     """
     
     def __init__(self, logger: Logger, config: "ConfigProtocol"):
@@ -84,33 +85,51 @@ class ProviderFactory:
     def create_lmstudio_client(self) -> Optional[LMStudioClient]:
         """
         Create LM Studio client for local inference.
-        
+
         Returns:
             LMStudioClient instance or None if base URL not configured.
         """
         if not self.config.LM_STUDIO_BASE_URL:
             return None
-        
+
         client = LMStudioClient(
             base_url=self.config.LM_STUDIO_BASE_URL,
             logger=self.logger
         )
         self.logger.debug(f"LM Studio client initialized for URL: {self.config.LM_STUDIO_BASE_URL}")
         return client
-    
+
+    def create_ollama_client(self) -> Optional[OllamaClient]:
+        """
+        Create Ollama client for local inference with task-based model selection.
+
+        Returns:
+            OllamaClient instance or None if base URL not configured.
+        """
+        if not self.config.OLLAMA_BASE_URL:
+            return None
+
+        client = OllamaClient(
+            base_url=self.config.OLLAMA_BASE_URL,
+            logger=self.logger
+        )
+        self.logger.debug(f"Ollama client initialized for URL: {self.config.OLLAMA_BASE_URL}")
+        return client
+
     def create_all_clients(self) -> dict:
         """
         Create all available AI provider clients based on configuration.
-        
+
         Returns:
-            Dictionary with keys: 'google', 'google_paid', 'openrouter', 'lmstudio'.
+            Dictionary with keys: 'google', 'google_paid', 'openrouter', 'lmstudio', 'ollama'.
             Values are client instances or None if not configured.
         """
         google_client, google_paid_client = self.create_google_clients()
-        
+
         return {
             'google': google_client,
             'google_paid': google_paid_client,
             'openrouter': self.create_openrouter_client(),
-            'lmstudio': self.create_lmstudio_client()
+            'lmstudio': self.create_lmstudio_client(),
+            'ollama': self.create_ollama_client()
         }

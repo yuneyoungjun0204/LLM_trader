@@ -288,7 +288,7 @@ class TechnicalCalculator:
         sma_arrays: Dict[str, np.ndarray] = None
     ) -> Dict[str, Any]:
         """Weekly macro trend using 200W SMA methodology with timestamps.
-        
+
         Args:
             ti: TechnicalIndicators instance with weekly data
             available_weeks: Number of weeks available
@@ -310,7 +310,7 @@ class TechnicalCalculator:
             'confidence_score': 0,
             'multi_year_trend': None
         }
-        
+
         # Skip if insufficient data
         if available_weeks < 50:
             if self.logger:
@@ -339,7 +339,7 @@ class TechnicalCalculator:
             analysis['price_above_200w_sma'] = current_price > sma_200w
             distance = ((current_price - sma_200w) / sma_200w) * 100
             analysis['distance_from_200w_sma_pct'] = float(distance)
-        
+
         # Golden/Death Cross with timestamps (use pre-calculated arrays if available)
         if 50 in weekly_sma_values and 200 in weekly_sma_values:
             # Use passed arrays or calculate if not provided (backward compatibility)
@@ -349,9 +349,7 @@ class TechnicalCalculator:
             else:
                 sma_50w_array = ti.overlap.sma(ti.close, 50)
                 sma_200w_array = ti.overlap.sma(ti.close, 200)
-            
 
-            
             golden_found, golden_weeks_ago, _, _ = detect_golden_cross_numba(sma_50w_array, sma_200w_array)
             if golden_found:
                 analysis['golden_cross'] = True
@@ -360,7 +358,7 @@ class TechnicalCalculator:
                 analysis['golden_cross_date'] = formatter.format_date_from_timestamp(cross_ts)
                 if self.logger:
                     self.logger.info(f"🌟 Weekly Golden Cross: {golden_weeks_ago}w ago ({analysis['golden_cross_date']})")
-            
+
             death_found, death_weeks_ago, _, _ = detect_death_cross_numba(sma_50w_array, sma_200w_array)
             if death_found:
                 analysis['death_cross'] = True
@@ -369,13 +367,13 @@ class TechnicalCalculator:
                 analysis['death_cross_date'] = formatter.format_date_from_timestamp(cross_ts)
                 if self.logger:
                     self.logger.warning(f"⚠️ Weekly Death Cross: {death_weeks_ago}w ago ({analysis['death_cross_date']})")
-            
+
             # SMA relationship
             if weekly_sma_values[50] > weekly_sma_values[200]:
                 analysis['sma_50w_vs_200w'] = 'Bullish'
             elif weekly_sma_values[50] < weekly_sma_values[200]:
                 analysis['sma_50w_vs_200w'] = 'Bearish'
-        
+
         # SMA alignment check
         if all(p in weekly_sma_values for p in [20, 50, 100, 200]):
             smas = [weekly_sma_values[p] for p in [20, 50, 100, 200]]
@@ -386,16 +384,16 @@ class TechnicalCalculator:
         
         # Trend direction with confidence
         bullish = sum([
-            analysis['price_above_200w_sma'], 
+            analysis['price_above_200w_sma'],
             analysis['sma_50w_vs_200w'] == 'Bullish',
-            analysis['golden_cross'], 
+            analysis['golden_cross'],
             analysis['weekly_sma_alignment'] == 'Bullish (Ascending)',
             analysis.get('distance_from_200w_sma_pct', 0) > 20
         ])
         bearish = sum([
-            not analysis['price_above_200w_sma'], 
+            not analysis['price_above_200w_sma'],
             analysis['sma_50w_vs_200w'] == 'Bearish',
-            analysis['death_cross'], 
+            analysis['death_cross'],
             analysis['weekly_sma_alignment'] == 'Bearish (Descending)',
             analysis.get('distance_from_200w_sma_pct', 0) < -20
         ])
