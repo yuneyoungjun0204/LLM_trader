@@ -89,19 +89,34 @@ def stochastic_numba(high, low, close, period_k, smooth_k, period_d):
     n = len(close)
     k_values = np.full(n, np.nan)
     d_values = np.full(n, np.nan)
+    
+    # 🔥 SAFE: 최소 데이터 요구사항 체크
+    min_required = period_k + smooth_k + period_d
+    if n < min_required:
+        # 데이터가 부족하면 NaN 배열 반환 (이 함수는 indicator_base에서 이미 체크되지만 추가 안전장치)
+        return np.full(n, np.nan), np.full(n, np.nan)
 
     for i in range(period_k - 1, n):
-        high_max = np.max(high[i - period_k + 1:i + 1])
-        low_min = np.min(low[i - period_k + 1:i + 1])
+        start_idx = i - period_k + 1
+        if start_idx < 0:
+            start_idx = 0
+        high_max = np.max(high[start_idx:i + 1])
+        low_min = np.min(low[start_idx:i + 1])
 
         if high_max != low_min:
             k_values[i] = 100 * (close[i] - low_min) / (high_max - low_min)
 
     smoothed_k = np.full(n, np.nan)
     for i in range(period_k + smooth_k - 2, n):
-        smoothed_k[i] = np.mean(k_values[i - smooth_k + 1:i + 1])
+        start_idx = i - smooth_k + 1
+        if start_idx < 0:
+            start_idx = 0
+        smoothed_k[i] = np.mean(k_values[start_idx:i + 1])
         if i >= period_k + smooth_k + period_d - 3:
-            d_values[i] = np.mean(smoothed_k[i - period_d + 1:i + 1])
+            d_start_idx = i - period_d + 1
+            if d_start_idx < 0:
+                d_start_idx = 0
+            d_values[i] = np.mean(smoothed_k[d_start_idx:i + 1])
 
     return smoothed_k, d_values
 

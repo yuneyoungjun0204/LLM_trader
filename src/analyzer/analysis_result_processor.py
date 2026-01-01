@@ -401,8 +401,35 @@ class AnalysisResultProcessor:
                     except ValueError:
                         continue
 
+            # 🔥 CRITICAL: Auto-map direction from decision/signal
+            # Extract direction from JSON or text, or auto-map from decision
+            direction_patterns = [
+                r'["\']?direction["\']?\s*:\s*["\']?(LONG|SHORT|NEUTRAL)["\']?',
+                r'Direction\s*:\s*["\']?(LONG|SHORT|NEUTRAL)["\']?',
+                r'Position\s*:\s*["\']?(LONG|SHORT|NEUTRAL)["\']?',
+            ]
+            direction = None
+            for pattern in direction_patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    direction = match.group(1).upper()
+                    self.logger.debug(f"🎯 Found direction via pattern: {direction}")
+                    break
+            
+            # Auto-map direction if not found in text
+            if not direction:
+                if decision == "BUY":
+                    direction = "LONG"
+                elif decision == "SELL":
+                    direction = "SHORT"
+                elif decision in ["HOLD", "CLOSE", "UPDATE"]:
+                    direction = "NEUTRAL"
+                else:
+                    direction = "NEUTRAL"  # Default for UNKNOWN
+                self.logger.info(f"🎯 Auto-mapped direction: {decision} → {direction}")
+
             # Log extracted values
-            self.logger.info(f"🔍 Iron-clad extraction: Decision={decision}, Conf={confidence}, TP={take_profit}, SL={stop_loss}")
+            self.logger.info(f"🔍 Iron-clad extraction: Decision={decision}, Direction={direction}, Conf={confidence}, TP={take_profit}, SL={stop_loss}")
 
             # Even if decision is UNKNOWN, we return success with best-guess values
             # This ensures the system NEVER returns complete failure
@@ -412,12 +439,13 @@ class AnalysisResultProcessor:
                     "analysis": {
                         "signal": decision,      # Primary field (used by OpenRouter responses)
                         "decision": decision,    # Legacy field (for compatibility)
+                        "direction": direction,  # 🔥 CRITICAL: Auto-mapped direction
                         "confidence": confidence,
                         "entry_price": entry_price,
                         "stop_loss": stop_loss,
                         "take_profit": take_profit,
-                        "reasoning": f"Iron-clad regex extraction (Signal: {decision}, Confidence: {confidence}%)",
-                        "summary": f"Extracted via fallback parser - {decision} with {confidence}% confidence"
+                        "reasoning": f"Iron-clad regex extraction (Signal: {decision}, Direction: {direction}, Confidence: {confidence}%)",
+                        "summary": f"Extracted via fallback parser - {decision} ({direction}) with {confidence}% confidence"
                     }
                 }
             }

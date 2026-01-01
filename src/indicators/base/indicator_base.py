@@ -39,16 +39,28 @@ class IndicatorBase:
         if not len(self.close):
             raise ValueError("Data not initialized. Call get_data() first.")
 
-        # 🔥 FORCED ACTIVATION: 데이터가 부족해도 에러를 내지 않고 경고만 출력
-        # min_periods 개념 적용 - 있는 데이터만큼이라도 계산 시도
+        # 🔥 SAFE HANDLING: 데이터가 부족하면 계산을 건너뛰고 NaN 반환
+        # numba 함수는 데이터 부족 시 메모리 오류 발생 가능성이 있음
         if len(self.close) < required_length:
             import warnings
+            import numpy as np
             warnings.warn(
                 f"Insufficient data for optimal calculation. Need {required_length} points, have {len(self.close)}. "
-                f"Proceeding with available data (min_periods=1 behavior).",
+                f"Skipping calculation to prevent memory errors.",
                 UserWarning
             )
-            # 에러를 발생시키지 않고 계속 진행
+            # 함수 이름으로 반환 타입 판단 (간단하고 안전)
+            n = len(self.close)
+            func_name = func.__name__.lower()
+            if 'stochastic' in func_name:
+                # stochastic: (k_values, d_values) 튜플 반환
+                return (np.full(n, np.nan), np.full(n, np.nan))
+            elif 'macd' in func_name:
+                # macd: (macd_line, signal_line, histogram) 튜플 반환
+                return (np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan))
+            else:
+                # 단일 배열 반환 (대부분의 인디케이터)
+                return np.full(n, np.nan)
 
         if self.measure_time:
             start_time = timeit.default_timer()

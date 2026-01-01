@@ -50,6 +50,8 @@ class MomentumIndicators(IndicatorCategory['MomentumIndicators']):
             smooth_k: int = 3,
             period_d: int = 3
     ) -> Tuple[np.ndarray, np.ndarray]:
+        # 🔥 SAFE: 최소 데이터 요구사항 = period_k + smooth_k + period_d (안전 마진 포함)
+        min_required = period_k + smooth_k + period_d + 2  # 안전 마진
         return self._base.calculate_indicator(
             stochastic_numba,
             self.high,
@@ -58,7 +60,7 @@ class MomentumIndicators(IndicatorCategory['MomentumIndicators']):
             period_k,
             smooth_k,
             period_d,
-            required_length=3
+            required_length=min_required
         )
 
     def roc(self, length: int = 1) -> np.ndarray:

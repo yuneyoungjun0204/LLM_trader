@@ -58,10 +58,23 @@ class TechnicalCalculator:
 
     def _calculate_momentum_indicators(self) -> Dict[str, np.ndarray]:
         """Calculate momentum indicators"""
+        # 🔥 SAFE: 데이터 부족 시 안전하게 처리
+        try:
+            stoch_result = self.ti.momentum.stochastic(period_k=14, smooth_k=3, period_d=3)
+            stoch_k = stoch_result[0]
+            stoch_d = stoch_result[1]
+        except Exception as e:
+            import numpy as np
+            n = len(self.ti._base.close)
+            stoch_k = np.full(n, np.nan)
+            stoch_d = np.full(n, np.nan)
+            if self.logger:
+                self.logger.warning(f"Failed to calculate stochastic: {e}, returning NaN arrays")
+        
         indicators = {
             "rsi": self.ti.momentum.rsi(length=14),
-            "stoch_k": self.ti.momentum.stochastic(period_k=14, smooth_k=3, period_d=3)[0],
-            "stoch_d": self.ti.momentum.stochastic(period_k=14, smooth_k=3, period_d=3)[1],
+            "stoch_k": stoch_k,
+            "stoch_d": stoch_d,
             "williams_r": self.ti.momentum.williams_r(length=14),
             "uo": self.ti.momentum.uo(),
             "tsi": self.ti.momentum.tsi(long_length=20, short_length=10),
