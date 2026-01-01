@@ -26,18 +26,29 @@ class CryptoCompareNewsClient:
     async def fetch_news(
         self,
         session: Optional[aiohttp.ClientSession] = None,
-        api_categories: Optional[List[Dict[str, Any]]] = None
+        api_categories: Optional[List[Dict[str, Any]]] = None,
+        target_coin: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Fetch crypto news from CryptoCompare API"""
+        """Fetch crypto news from CryptoCompare API
+
+        Args:
+            session: Optional aiohttp session to reuse
+            api_categories: Optional list of API categories
+            target_coin: Optional coin being analyzed (e.g., "PEPE", "BTC") to prioritize in categories
+        """
         articles = []
-        
+
         # Add optional query parameters based on categories
         categories_param = ""
         if api_categories:
-            important_cats = [cat['categoryName'] for cat in api_categories 
-                              if cat.get('categoryName', '') in self._get_important_categories()]
+            # 🔥 DYNAMIC: Get important categories and add target coin if provided
+            important_categories = self._get_important_categories(target_coin)
+
+            important_cats = [cat['categoryName'] for cat in api_categories
+                              if cat.get('categoryName', '') in important_categories]
             if important_cats:
                 categories_param = f"&categories={','.join(important_cats[:5])}"
+                self.logger.debug(f"Fetching news with priority categories: {important_cats[:5]}")
                 
         url = f"{self.config.RAG_NEWS_API_URL}{categories_param}"
         
@@ -68,6 +79,23 @@ class CryptoCompareNewsClient:
         return articles
     
     @staticmethod
-    def _get_important_categories() -> List[str]:
-        """Get list of important categories to prioritize in API requests"""
-        return ["BTC", "ETH", "DeFi", "NFT", "Layer 2", "Stablecoin", "Altcoin"]
+    def _get_important_categories(target_coin: Optional[str] = None) -> List[str]:
+        """Get list of important categories to prioritize in API requests
+
+        Args:
+            target_coin: Optional coin ticker (e.g., "PEPE", "SOL") to add to priority categories
+
+        Returns:
+            List of category names to prioritize
+        """
+        # Base important categories
+        base_categories = ["BTC", "ETH", "DeFi", "NFT", "Layer 2", "Stablecoin", "Altcoin"]
+
+        # 🔥 DYNAMIC COIN CATEGORY: Add target coin if provided and not already in list
+        if target_coin:
+            target_coin_upper = target_coin.upper()
+            if target_coin_upper not in base_categories:
+                # Insert target coin at the beginning for highest priority
+                return [target_coin_upper] + base_categories
+
+        return base_categories

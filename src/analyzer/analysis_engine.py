@@ -88,14 +88,19 @@ class AnalysisEngine:
         try:
             self.timeframe = self.config.TIMEFRAME
             self.limit = self.config.CANDLE_LIMIT
-            
-            # Validate timeframe
+
+            # 🔥 FORCED ACTIVATION: Always accept user-requested timeframe
+            # No more "Invalid timeframe" errors - if user wants 5m, they get 5m!
             if not TimeframeValidator.validate(self.timeframe):
                 self.logger.warning(
-                    f"Timeframe '{self.timeframe}' is not fully supported. "
-                    f"Supported timeframes: {', '.join(TimeframeValidator.SUPPORTED_TIMEFRAMES)}. "
-                    f"Proceeding but expect potential calculation errors."
+                    f"⚠️ Timeframe '{self.timeframe}' not in standard list. "
+                    f"Standard: {', '.join(TimeframeValidator.SUPPORTED_TIMEFRAMES)}. "
+                    f"🔥 FORCING ACTIVATION - Proceeding with user's timeframe anyway!"
                 )
+                # Don't raise error - proceed with user's choice
+            else:
+                self.logger.info(f"✅ Timeframe '{self.timeframe}' validated successfully")
+
         except Exception as e:
             self.logger.exception(f"Error loading configuration values: {e}.")
             raise
@@ -213,8 +218,8 @@ class AnalysisEngine:
 
     @profile_performance
     async def analyze_market(
-        self, 
-        provider: Optional[str] = None, 
+        self,
+        provider: Optional[str] = None,
         model: Optional[str] = None,
         additional_context: Optional[str] = None,
         previous_response: Optional[str] = None,
@@ -222,11 +227,12 @@ class AnalysisEngine:
         position_context: Optional[str] = None,
         performance_context: Optional[str] = None,
         brain_context: Optional[str] = None,
-        last_analysis_time: Optional[str] = None
+        last_analysis_time: Optional[str] = None,
+        backtesting_mode: bool = False
     ) -> Dict[str, Any]:
         """
         Orchestrate the complete market analysis workflow.
-        
+
         Args:
             provider: Optional AI provider override (admin only)
             model: Optional AI model override (admin only)
@@ -237,32 +243,38 @@ class AnalysisEngine:
             performance_context: Recent trading history and performance (goes to system prompt)
             brain_context: Distilled trading insights from closed trades (goes to system prompt)
             last_analysis_time: Formatted timestamp of last analysis (e.g., "2025-12-26 14:30:00")
-            
+            backtesting_mode: If True, skip live data collection (use local data only)
+
         Returns:
             Dictionary containing analysis results
         """
         try:
-            # Step 1: Collect all required data
-            if not await self._collect_market_data():
-                return {"error": "Failed to collect market data", "details": "Data collection failed"}
-            
-            # Step 2: Enrich context with external data
-            await self._enrich_market_context()
-            
-            # Step 3: Perform technical analysis
+            # Step 1: Collect all required data (skip in backtesting mode)
+            if not backtesting_mode:
+                if not await self._collect_market_data():
+                    return {"error": "Failed to collect market data", "details": "Data collection failed"}
+
+                # Step 2: Enrich context with external data
+                await self._enrich_market_context()
+            else:
+                self.logger.info("🔄 Backtesting mode: Skipping live data collection")
+                # In backtesting mode, we rely on data already populated in context
+                # by the strategy (from Freqtrade's dataframe)
+
+            # Step 3: Perform technical analysis (works in both modes)
             await self._perform_technical_analysis()
-            
+
             # Step 4: Generate AI analysis
             analysis_result = await self._generate_ai_analysis(provider, model, additional_context, previous_response, previous_indicators, position_context, performance_context, brain_context, last_analysis_time)
-            
+
             # Store the result for later publication
             self.last_analysis_result = analysis_result
-                
+
             # Reset custom instructions for next run
             self.prompt_builder.custom_instructions = []
-            
+
             return analysis_result
-            
+
         except Exception as e:
             self.logger.exception(f"Analysis failed: {e}")
             return {"error": str(e), "recommendation": "HOLD"}

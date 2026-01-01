@@ -228,17 +228,27 @@ class DataFetcher:
     def _process_ticker_data(self, tickers: Dict[str, Any]) -> Dict[str, Any]:
         """Process ticker data into CryptoCompare-like format."""
         result = {"RAW": {}, "DISPLAY": {}}
-        
+
         for symbol, ticker in tickers.items():
+            # 🔥 SAFETY 1: Skip null/incomplete ticker data
+            if not ticker or not isinstance(ticker, dict):
+                self.logger.debug(f"Skipping {symbol}: ticker is null or not a dict")
+                continue
+
+            # 🔥 SAFETY 2: Skip tickers without essential price data
+            if ticker.get('last') is None:
+                self.logger.debug(f"Skipping {symbol}: no 'last' price available")
+                continue
+
             base_currency, quote_currency = self._extract_currencies(symbol)
             if not base_currency or not quote_currency:
                 continue
-                
+
             if not self._has_required_ticker_data(ticker):
                 continue
-                
+
             self._add_ticker_to_result(result, base_currency, quote_currency, ticker)
-        
+
         return result
 
     def _extract_currencies(self, symbol: str) -> Tuple[Optional[str], Optional[str]]:
@@ -313,24 +323,55 @@ class DataFetcher:
             "INFO": ticker.get('info', {}),  # Raw exchange data (for advanced analysis)
         }
 
+    def _safe_float(self, value: Any, default: float = 0.0) -> float:
+        """
+        🔥 SAFETY: Safely convert any value to float with fallback.
+
+        Args:
+            value: Value to convert (can be None, str, int, float, etc.)
+            default: Fallback value if conversion fails
+
+        Returns:
+            Float value or default
+        """
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
     def _create_display_ticker_data(self, ticker: Dict[str, Any], quote_currency: str) -> Dict[str, Any]:
         """Create display ticker data structure with formatted values."""
         is_usd_quote = quote_currency in ("USD", "USDT")
-        
-        def format_price(value: float) -> str:
+
+        def format_price(value: Any) -> str:
+            """🔥 SAFETY: Format price with null protection"""
+            safe_value = self._safe_float(value, 0.0)
             if is_usd_quote:
-                return f"$ {value:,.2f}"
-            return f"{value:,.8f}"
-        
+                return f"$ {safe_value:,.2f}"
+            return f"{safe_value:,.8f}"
+
+        def format_percentage(value: Any) -> str:
+            """🔥 SAFETY: Format percentage with null protection"""
+            safe_value = self._safe_float(value, 0.0)
+            return f"{safe_value:,.2f}"
+
+        def format_volume(value: Any) -> str:
+            """🔥 SAFETY: Format volume with null protection"""
+            safe_value = self._safe_float(value, 0.0)
+            return f"{safe_value:,.2f}"
+
+        # 🔥 SAFETY 3: All formatting uses null-safe helpers
         return {
-            "PRICE": format_price(ticker.get('last', 0)),
-            "CHANGEPCT24HOUR": f"{ticker.get('percentage', 0):,.2f}",
-            "VOLUME24HOUR": f"{ticker.get('baseVolume', 0):,.2f}",
-            "HIGH24HOUR": format_price(ticker.get('high', 0)),
-            "LOW24HOUR": format_price(ticker.get('low', 0)),
-            "VWAP": format_price(ticker.get('vwap', 0)),
-            "BID": format_price(ticker.get('bid', 0)),
-            "ASK": format_price(ticker.get('ask', 0)),
+            "PRICE": format_price(ticker.get('last')),
+            "CHANGEPCT24HOUR": format_percentage(ticker.get('percentage')),
+            "VOLUME24HOUR": format_volume(ticker.get('baseVolume')),
+            "HIGH24HOUR": format_price(ticker.get('high')),
+            "LOW24HOUR": format_price(ticker.get('low')),
+            "VWAP": format_price(ticker.get('vwap')),
+            "BID": format_price(ticker.get('bid')),
+            "ASK": format_price(ticker.get('ask')),
         }
 
     @retry_async()
@@ -649,6 +690,81 @@ class DataFetcher:
         #     f"Market microstructure for {pair}: "
         #     f"available_data={result['available_data']}"
         # )
-        
+
         return result
 
+    async def fetch_multi_timeframe_data(
+        self,
+        pair: str,
+        timeframes: Optional[List[str]] = None,
+        limits: Optional[Dict[str, int]] = None
+    ) -> Dict[str, Tuple[NDArray, NDArray]]:
+        """
+        Fetch multi-timeframe candlestick data for comprehensive analysis.
+
+        🔥 OPTIMIZED FOR SHORT-TERM SWING TRADING
+        - Primary: 5m, 15m (precision entry/exit timing)
+        - Context: 1h, 4h, 12h (trend backdrop and S/R levels)
+
+        Args:
+            pair: Trading pair (e.g., 'BTC/USDT:USDT')
+            timeframes: List of timeframes to fetch (default: ['5m', '15m', '1h', '4h', '12h'])
+            limits: Dict mapping timeframe to candle count (default: optimized for day trading)
+
+        Returns:
+            Dict[timeframe, (ohlcv_array, close_series)]
+            Example: {'5m': (ohlcv_100x6, close_100), '15m': (ohlcv_100x6, close_100), ...}
+        """
+        # Default timeframes: SHORT-TERM SWING (5m/15m co-main, 1h/4h/12h context)
+        if timeframes is None:
+            timeframes = ["5m", "15m", "1h", "4h", "12h"]
+
+        # 🔥 OPTIMIZED LIMITS: Token-efficient data collection
+        # - 5m/15m: 80 candles (6-20 hours of micro flow)
+        # - 1h: 60 candles (2.5 days of key S/R levels)
+        # - 4h/12h: 30 candles (trend backdrop only)
+        if limits is None:
+            limits = {
+                "5m": 80,    # ~6.5 hours (CO-PRIMARY - precision entry)
+                "15m": 80,   # ~20 hours (CO-PRIMARY - trend confirmation)
+                "1h": 60,    # ~2.5 days (CONTEXT - recent S/R)
+                "4h": 30,    # ~5 days (CONTEXT - structural S/R)
+                "12h": 30,   # ~15 days (CONTEXT - macro trend)
+                "1d": 30,    # ~1 month (legacy)
+            }
+
+        self.logger.debug(f"Fetching multi-timeframe data for {pair}: {timeframes}")
+
+        # Create parallel fetch tasks
+        import asyncio
+        tasks = []
+        for tf in timeframes:
+            limit = limits.get(tf, 80)  # Default 80 if not specified
+            task = self.fetch_candlestick_data(pair, tf, limit)
+            tasks.append((tf, task))
+
+        # Execute all fetches in parallel
+        results = {}
+        fetch_results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
+
+        for (tf, _), result in zip(tasks, fetch_results):
+            if isinstance(result, Exception):
+                self.logger.error(f"Failed to fetch {tf} data: {result}")
+                continue
+
+            if result is None:
+                self.logger.warning(f"No data returned for {tf} timeframe")
+                continue
+
+            ohlcv, _ = result
+            close_series = ohlcv[:, 4]  # Extract close prices
+            results[tf] = (ohlcv, close_series)
+
+            self.logger.info(f"✅ Fetched {tf}: {len(ohlcv)} candles")
+
+        if not results:
+            self.logger.error(f"❌ No multi-timeframe data collected for {pair}")
+            return {}
+
+        self.logger.info(f"📊 Multi-timeframe data collection complete: {list(results.keys())}")
+        return results

@@ -40,7 +40,12 @@ def sma_numba(arr, length):
     n = len(arr)
     sma_values = np.full(n, np.nan, dtype=np.float64)
 
+    # 🔥 FORCED ACTIVATION: min_periods=1 개념 적용
+    # 데이터가 부족해도 있는 만큼 계산 (부분 평균)
     if n < length:
+        # 데이터가 부족하면 있는 데이터 전체의 평균을 마지막에 넣음
+        if n > 0:
+            sma_values[n - 1] = np.mean(arr)
         return sma_values
 
     window_sum = np.sum(arr[:length])

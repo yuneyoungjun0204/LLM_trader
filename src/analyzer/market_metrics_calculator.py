@@ -68,22 +68,18 @@ class MarketMetricsCalculator:
         # self.logger.debug(f"Period candle requirements: {periods}")
         
         try:
+            # 🔥 FORCED ACTIVATION: 데이터가 적어도 최대한 분석 수행
             for period_name, required_candles in periods.items():
                 if len(data) >= required_candles:
-                    # self.logger.debug(f"Calculating full {period_name} metrics with {required_candles} candles")
+                    # 충분한 데이터 - 정상 분석
                     period_metrics[period_name] = self._calculate_period_metrics(data[-required_candles:], period_name, context)
+                elif len(data) >= 10:
+                    # 🔥 데이터가 부족해도 10개 이상이면 무조건 분석 수행
+                    self.logger.debug(f"{period_name}: Using {len(data)} candles (required {required_candles}) - FORCED ACTIVATION")
+                    period_metrics[period_name] = self._calculate_period_metrics(data, f"{period_name} (Partial)", context)
                 else:
-                    if period_name in ["1D", "2D", "3D"]:
-                        self.logger.warning(f"Insufficient data for {period_name} analysis. Need {required_candles}, have {len(data)} candles")
-                        period_metrics[period_name] = self._calculate_period_metrics(data, f"{period_name} (Partial)", context)
-                    elif period_name == "7D" and len(data) >= periods["1D"]:  # Use dynamic 1D requirement
-                        self.logger.warning(f"Insufficient data for 7D metrics. Only {len(data)} candles available, need {required_candles}")
-                        period_metrics["7D"] = self._calculate_period_metrics(data, "7D (Partial)", context)
-                    elif period_name == "30D" and len(data) >= periods["7D"]:  # Use dynamic 7D requirement
-                        self.logger.warning(f"Insufficient data for 30D metrics. Only {len(data)} candles available, need {required_candles}")
-                        period_metrics["30D"] = self._calculate_period_metrics(data, "30D (Partial)", context)
-                    else:
-                        self.logger.warning(f"Cannot calculate {period_name} metrics - not enough data (need {required_candles}, have {len(data)})")
+                    # 데이터가 너무 적음 (10개 미만) - 스킵
+                    self.logger.debug(f"{period_name}: Skipped (only {len(data)} candles available)")
             
             # Log what was calculated
             # for period_name, metrics_data in period_metrics.items():

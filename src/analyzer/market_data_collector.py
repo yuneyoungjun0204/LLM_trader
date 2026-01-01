@@ -74,19 +74,22 @@ class MarketDataCollector:
             "success": True,
             "errors": []
         }
-        
+
         try:
             if not self.symbol or not self.exchange or not self.data_fetcher:
                 error_msg = "Cannot collect data: collector not properly initialized"
                 self.logger.error(error_msg)
                 return {"success": False, "errors": [error_msg]}
-            
+
             # Fetch OHLCV data
             ohlcv_success = await self.fetch_ohlcv(context)
             if not ohlcv_success:
                 result["errors"].append("Failed to fetch OHLCV data")
                 result["success"] = False
-            
+
+            # Fetch multi-timeframe data for MTF analysis
+            await self.fetch_multi_timeframe_data(context)
+
             # Fetch news context via RAG engine
             market_context = await self.rag_engine.retrieve_context(
                 "current market news analysis trends",
@@ -94,7 +97,7 @@ class MarketDataCollector:
                 k=self.rag_engine.config.RAG_NEWS_LIMIT
             )
             result["market_context"] = market_context
-            
+
             # Store article URLs from RAG engine
             try:
                 self.article_urls = self.rag_engine.context_builder.get_latest_article_urls()
@@ -102,14 +105,14 @@ class MarketDataCollector:
             except Exception as e:
                 self.logger.warning(f"Could not retrieve article URLs from RAG engine: {e}")
                 self.article_urls = {}
-                
+
             result["article_urls"] = self.article_urls
-                
+
         except Exception as e:
             self.logger.exception(f"Error collecting market data: {e}")
             result["success"] = False
             result["errors"].append(str(e))
-            
+
         return result
         
     async def fetch_ohlcv(self, context) -> bool:
@@ -246,7 +249,73 @@ class MarketDataCollector:
             context.meets_200w_threshold = False
             return False
 
-        
+    async def fetch_multi_timeframe_data(self, context) -> bool:
+        """Fetch multi-timeframe OHLCV data for comprehensive analysis"""
+        try:
+            if not self.symbol or not self.exchange or not self.data_fetcher:
+                self.logger.error("Cannot fetch MTF data: symbol, exchange, or data_fetcher not initialized")
+                return False
+
+            # 🔥 ENHANCED: Define timeframes to fetch (5m, 15m, 1h, 4h, 12h, 1d)
+            # 12시간봉은 1시간봉과 일봉 사이의 '물줄기' - 추세 정렬 분석에 필수!
+            timeframes = ["5m", "15m", "1h", "4h", "12h", "1d"]
+
+            # Define candle limits per timeframe
+            limits = {
+                "5m": 100,    # ~8 hours of 5m candles
+                "15m": 100,   # ~25 hours of 15m candles
+                "1h": 200,    # ~8 days of 1h candles
+                "4h": 100,    # ~16 days of 4h candles
+                "12h": 60,    # 🔥 NEW: ~30 days of 12h candles (중기 추세 분석)
+                "1d": 365     # ~1 year of daily candles
+            }
+
+            self.logger.info(f"📊 [MTF] Fetching multi-timeframe data for {self.symbol}: {timeframes}")
+
+            # Fetch MTF data using the data_fetcher's method
+            mtf_data = await self.data_fetcher.fetch_multi_timeframe_data(
+                pair=self.symbol,
+                timeframes=timeframes,
+                limits=limits
+            )
+
+            # Store in context
+            context.multi_timeframe_data = mtf_data
+
+            # Log what we got
+            successful_tfs = [tf for tf, data in mtf_data.items() if data is not None]
+            failed_tfs = [tf for tf, data in mtf_data.items() if data is None]
+
+            if successful_tfs:
+                self.logger.info(f"✅ [MTF] Successfully fetched: {', '.join(successful_tfs)}")
+                # Log detailed info for each successful timeframe
+                for tf in successful_tfs:
+                    ohlcv_array, close_series = mtf_data[tf]
+                    # Extract last close price from series (handle both scalar and array)
+                    if hasattr(close_series, '__iter__') and len(close_series) > 0:
+                        latest_close = float(close_series[-1])
+                    else:
+                        latest_close = float(close_series) if close_series else 0.0
+                    self.logger.info(f"   - {tf}: {len(ohlcv_array)} candles, latest=${latest_close:,.2f}")
+            if failed_tfs:
+                self.logger.warning(f"❌ [MTF] Failed to fetch: {', '.join(failed_tfs)}")
+
+            # Verify data was stored
+            if hasattr(context, 'multi_timeframe_data'):
+                self.logger.info(f"✅ [MTF] Data stored in context: {len(context.multi_timeframe_data)} timeframes")
+            else:
+                self.logger.error(f"❌ [MTF] CRITICAL: Data not stored in context!")
+
+            return len(successful_tfs) > 0
+
+        except Exception as e:
+            self.logger.error(f"❌ [MTF] Error fetching multi-timeframe data: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            context.multi_timeframe_data = {}
+            return False
+
+
     async def fetch_and_process_sentiment_data(self, context) -> bool:
         """Fetch and process sentiment data (fear & greed index)"""
         try:

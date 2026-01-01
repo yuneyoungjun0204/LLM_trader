@@ -13,18 +13,23 @@ import re
 
 class TimeframeValidator:
     """Validates and manages timeframe configurations"""
-    SUPPORTED_TIMEFRAMES = ['1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
+    # 🔥 EXPANDED: Added 5m, 15m for short-term swing trading
+    SUPPORTED_TIMEFRAMES = ['5m', '15m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
     TIMEFRAME_MINUTES = {
+        '5m': 5,      # Short-term precision entry
+        '15m': 15,    # Short-term trend confirmation
         '1h': 60,
         '2h': 120,
         '4h': 240,
         '6h': 360,
         '8h': 480,
-        '12h': 720,
+        '12h': 720,   # Critical for trend backdrop
         '1d': 1440,
         '1w': 10080
     }
     CRYPTOCOMPARE_FORMAT = {
+        '5m': 'minute',   # CryptoCompare minute endpoint
+        '15m': 'minute',  # CryptoCompare minute endpoint
         '1h': 'hour',
         '2h': 'hour',
         '4h': 'hour',
@@ -33,7 +38,7 @@ class TimeframeValidator:
         '12h': 'hour',
         '1d': 'day'
     }
-    CCXT_STANDARD_TIMEFRAMES = ['1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
+    CCXT_STANDARD_TIMEFRAMES = ['5m', '15m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w']
 
     @classmethod
     def validate(cls, timeframe: str) -> bool:
@@ -70,27 +75,29 @@ class TimeframeValidator:
     def parse_period_to_minutes(cls, period: str) -> int:
         """
         Parse period string to minutes. Supports both timeframes and arbitrary periods.
-        
+
         Args:
-            period: Period string (e.g., "1h", "4h", "24h", "7d", "30d")
-            
+            period: Period string (e.g., "5m", "15m", "1h", "4h", "24h", "7d", "30d")
+
         Returns:
             int: Number of minutes in the period
-            
+
         Raises:
             ValueError: If period format is invalid
         """
-        match = re.match(r'^(\d+)([hd])$', period.lower())
+        match = re.match(r'^(\d+)([mhd])$', period.lower())  # Added 'm' for minutes
         if not match:
             raise ValueError(f"Invalid period format: {period}")
-        
+
         value = int(match.group(1))
         unit = match.group(2)
-        
-        if unit == 'h':
-            return value * 60
+
+        if unit == 'm':
+            return value  # Minutes
+        elif unit == 'h':
+            return value * 60  # Hours to minutes
         elif unit == 'd':
-            return value * 1440
+            return value * 1440  # Days to minutes
         else:
             raise ValueError(f"Invalid period unit: {unit}")
     
@@ -147,15 +154,17 @@ class TimeframeValidator:
             )
         
         endpoint = cls.CRYPTOCOMPARE_FORMAT[timeframe]
-        
+
         # Extract multiplier from timeframe
-        if 'h' in timeframe:
+        if 'm' in timeframe:
+            multiplier = int(timeframe.replace('m', ''))
+        elif 'h' in timeframe:
             multiplier = int(timeframe.replace('h', ''))
         elif 'd' in timeframe:
             multiplier = int(timeframe.replace('d', ''))
         else:
             multiplier = 1
-        
+
         return endpoint, multiplier
     
     @classmethod

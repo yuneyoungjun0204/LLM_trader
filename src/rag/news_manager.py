@@ -4,7 +4,7 @@ News Management Module for RAG Engine
 Handles fetching, caching, and processing of cryptocurrency news articles.
 """
 
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Optional
 from src.logger.logger import Logger
 from .file_handler import RagFileHandler
 
@@ -34,15 +34,25 @@ class NewsManager:
             self.logger.exception(f"Error loading cached news: {e}")
             self.news_database = []
     
-    async def fetch_fresh_news(self, known_crypto_tickers: Set[str]) -> List[Dict[str, Any]]:
-        """Fetch fresh news articles from external API."""
+    async def fetch_fresh_news(self, known_crypto_tickers: Set[str], target_coin: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fetch fresh news articles from external API.
+
+        Args:
+            known_crypto_tickers: Set of known cryptocurrency tickers for detection
+            target_coin: Optional coin being analyzed (e.g., "PEPE") to prioritize in news fetch
+        """
         if self.cryptocompare_api is None:
             self.logger.error("CryptoCompare API client not initialized")
             return []
-            
+
         try:
             # Use the CryptoCompare API client to fetch news
-            articles = await self.cryptocompare_api.get_latest_news(limit=50, max_age_hours=24)
+            # 🔥 DYNAMIC: Pass target_coin to prioritize relevant news
+            articles = await self.cryptocompare_api.get_latest_news(
+                limit=50,
+                max_age_hours=24,
+                target_coin=target_coin
+            )
             
             if articles:
                 # Detect coins in articles using centralized method

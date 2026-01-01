@@ -35,53 +35,98 @@ class UnifiedParser:
         """
         Parse AI model response from raw string to structured data.
         Supports all AI providers: OpenRouter, Google AI, LM Studio.
+
+        🔥 NEW STRATEGY (3-LAYER SYSTEM): Extract LAST JSON block from text
+        - AI writes debate text in Layer 1-2 (beginning/middle)
+        - AI writes extraction JSON in Layer 3 (END)
+        - Parser looks for LAST { ... } block and force-cleans it
         """
         try:
             cleaned_text = self._clean_tool_response_tags(raw_text)
-            
+
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # STRATEGY 1 (PRIMARY): EXTRACT LAST JSON BLOCK (3-LAYER PRINCIPLE)
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # Find the LAST occurrence of { ... } in the text
+            last_brace_start = cleaned_text.rfind('{')  # rfind = reverse find (last occurrence)
+            if last_brace_start != -1:
+                # Track depth from last { to find matching }
+                depth = 0
+                last_brace_end = -1
+                for i in range(last_brace_start, len(cleaned_text)):
+                    if cleaned_text[i] == '{':
+                        depth += 1
+                    elif cleaned_text[i] == '}':
+                        depth -= 1
+                        if depth == 0:
+                            last_brace_end = i
+                            break
+
+                if last_brace_end != -1:
+                    json_candidate = cleaned_text[last_brace_start:last_brace_end+1]
+
+                    # Force-clean the extracted JSON (remove line breaks, extra whitespace)
+                    json_candidate_cleaned = json_candidate.replace('\n', ' ').replace('\r', ' ')
+                    json_candidate_cleaned = ' '.join(json_candidate_cleaned.split())  # normalize whitespace
+
+                    try:
+                        result = json.loads(json_candidate_cleaned)
+                        self.logger.debug("✅ JSON extracted via LAST block (3-layer principle)")
+                        return self._normalize_numeric_fields(result)
+                    except json.JSONDecodeError as e:
+                        self.logger.warning(f"Last JSON block found but decode failed: {e}")
+
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # STRATEGY 2 (FALLBACK): ```json ... ``` blocks
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             if "```json" in cleaned_text:
                 json_start = cleaned_text.find("```json") + 7
                 json_end = cleaned_text.find("```", json_start)
                 if json_end > json_start:
                     try:
                         result = json.loads(cleaned_text[json_start:json_end].strip())
+                        self.logger.debug("✅ JSON extracted via ```json``` block")
                         return self._normalize_numeric_fields(result)
                     except json.JSONDecodeError:
                         pass
-            
-            first_brace = cleaned_text.find('{')
-            if first_brace != -1:
-                depth = 0
-                for i in range(first_brace, len(cleaned_text)):
-                    if cleaned_text[i] == '{':
-                        depth += 1
-                    elif cleaned_text[i] == '}':
-                        depth -= 1
-                        if depth == 0:
-                            try:
-                                result = json.loads(cleaned_text[first_brace:i+1])
-                                return self._normalize_numeric_fields(result)
-                            except json.JSONDecodeError:
-                                pass
-                            break
-            
+
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # STRATEGY 3 (OLD FALLBACK): Heuristic extraction
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             heuristic = self._heuristic_extract_analysis_from_text(cleaned_text)
             if heuristic:
-                self.logger.debug("Extracted analysis from markdown text")
+                self.logger.debug("✅ Extracted analysis from markdown text")
                 return self._normalize_numeric_fields(heuristic)
-            
-            self.logger.warning(f"Unable to parse AI response, using fallback. Preview: {cleaned_text[:200]}")
+
+            self.logger.warning(f"❌ Unable to parse AI response, using fallback. Preview: {cleaned_text[:200]}")
             return self._create_fallback_response(cleaned_text)
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to parse AI response: {e}")
+            self.logger.error(f"❌ Failed to parse AI response: {e}")
             return self._create_error_response(str(e), raw_text)
     
     def validate_ai_response(self, response: Dict[str, Any]) -> bool:
-        """Validate that AI response has required structure."""
-        return (isinstance(response, dict) and 
-                "analysis" in response and 
-                isinstance(response["analysis"], dict))
+        """
+        Validate that AI response has required structure.
+
+        Supports two formats:
+        1. Standard analysis: {"analysis": {...}}
+        2. Dual-agent system: {"decision": "...", "confidence": ..., ...}
+        """
+        if not isinstance(response, dict):
+            return False
+
+        # Format 1: Standard analysis format
+        if "analysis" in response and isinstance(response["analysis"], dict):
+            return True
+
+        # Format 2: Dual-agent format (minimal 5-field JSON from 3-layer system)
+        # Required fields: decision, confidence, entry_price, stop_loss, take_profit
+        dual_agent_fields = ["decision", "confidence", "entry_price", "stop_loss", "take_profit"]
+        if all(field in response for field in dual_agent_fields):
+            return True
+
+        return False
     
     def extract_json_block(self, text: str, unwrap_key: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Extract JSON block from markdown-formatted text.

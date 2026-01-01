@@ -39,9 +39,16 @@ class IndicatorBase:
         if not len(self.close):
             raise ValueError("Data not initialized. Call get_data() first.")
 
+        # 🔥 FORCED ACTIVATION: 데이터가 부족해도 에러를 내지 않고 경고만 출력
+        # min_periods 개념 적용 - 있는 데이터만큼이라도 계산 시도
         if len(self.close) < required_length:
-            raise ValueError(
-                f"Insufficient data. Need at least {required_length} data points, but only have {len(self.close)}.")
+            import warnings
+            warnings.warn(
+                f"Insufficient data for optimal calculation. Need {required_length} points, have {len(self.close)}. "
+                f"Proceeding with available data (min_periods=1 behavior).",
+                UserWarning
+            )
+            # 에러를 발생시키지 않고 계속 진행
 
         if self.measure_time:
             start_time = timeit.default_timer()

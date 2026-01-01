@@ -10,7 +10,8 @@ from ..formatters import (
     TechnicalFormatter,
     LongTermFormatter,
     MarketOverviewFormatter,
-    MarketPeriodFormatter
+    MarketPeriodFormatter,
+    MultiTimeframeFormatter
 )
 from .context_builder import ContextBuilder
 
@@ -157,6 +158,37 @@ class PromptBuilder:
             self.technical_analysis_formatter.format_technical_analysis(context, self.timeframe),
             self.context_builder.build_market_period_metrics_section(context.market_metrics),
         ])
+
+        # Add multi-timeframe analysis if available
+        if hasattr(context, 'multi_timeframe_data') and context.multi_timeframe_data:
+            if self.logger:
+                self.logger.info(f"Adding MTF analysis to prompt for {len(context.multi_timeframe_data)} timeframes")
+
+            mtf_summary = MultiTimeframeFormatter.format_multi_timeframe_summary(
+                context.multi_timeframe_data,
+                context.symbol
+            )
+            if mtf_summary:
+                sections.append(mtf_summary)
+                if self.logger:
+                    self.logger.info("MTF summary added to prompt")
+
+            # Add timeframe alignment analysis
+            alignment_summary = MultiTimeframeFormatter.format_timeframe_alignment(
+                context.multi_timeframe_data
+            )
+            if alignment_summary:
+                sections.append(alignment_summary)
+                if self.logger:
+                    self.logger.info("MTF alignment analysis added to prompt")
+        else:
+            if self.logger:
+                has_attr = hasattr(context, 'multi_timeframe_data')
+                has_data = context.multi_timeframe_data if has_attr else None
+                self.logger.warning(
+                    f"MTF data not available - hasattr: {has_attr}, "
+                    f"data: {has_data}"
+                )
         
         # Add previous indicators comparison section if available
         if previous_indicators:

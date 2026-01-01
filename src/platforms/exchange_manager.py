@@ -241,3 +241,22 @@ class ExchangeManager:
         for symbols in self.symbols_by_exchange.values():
             all_symbols.update(symbols)
         return all_symbols
+
+    async def close(self):
+        """
+        Close all exchange connections gracefully.
+        Should be called when shutting down the application.
+        """
+        self.logger.info("Closing exchange connections...")
+
+        closed_count = 0
+        for exchange_id, exchange in self.exchanges.items():
+            try:
+                if hasattr(exchange, 'close') and callable(exchange.close):
+                    await exchange.close()
+                    closed_count += 1
+                    self.logger.debug(f"✅ Closed connection to {exchange_id}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Error closing {exchange_id}: {e}")
+
+        self.logger.info(f"Exchange connections closed: {closed_count}/{len(self.exchanges)}")

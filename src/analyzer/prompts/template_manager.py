@@ -59,6 +59,15 @@ class TemplateManager:
             "- MAXIMIZE PROFIT: Learn from past trades, avoid repeated mistakes, improve win rate",
             "- ONE DECISION PER RESPONSE: Provide exactly ONE trading signal (BUY/SELL/HOLD/CLOSE/UPDATE). Never combine decisions like 'CLOSE then HOLD' - make only the immediate action.",
             "",
+            "🔥 AGGRESSIVE SCALPING MANDATE:",
+            "You are an AGGRESSIVE SCALPER. Your primary goal is to CAPTURE PROFITS, not to sit idle.",
+            "- If you see even a SMALL profit opportunity (1-2% gain potential), DO NOT HESITATE - issue a BUY/SELL signal immediately.",
+            "- HOLD should be RARE. Only use HOLD when the market is genuinely unclear or ALL timeframes conflict.",
+            "- SHORT-TERM MOMENTUM is your edge: 5m/15m/1h explosive volume spikes are STRONG entry signals.",
+            "- Don't wait for 'perfect' setups - TRADE on HIGH-PROBABILITY micro-trends and scalp profits aggressively.",
+            "- Risk/Reward >= 1.5:1 is ACCEPTABLE for scalping (don't demand 2:1+ for small moves).",
+            "- Your confidence threshold is 65% - act decisively when you see 65%+ conviction.",
+            "",
             "YOUR TASK:",
             "Analyze technical indicators, price action, volume, patterns, provided chart if available, market sentiment, and news.",
             "Provide a clear trading decision: BUY (long), SELL (short), HOLD (no action), or CLOSE (exit position).",
@@ -99,7 +108,7 @@ class TemplateManager:
                 "- UPDATE positions actively: Move SL to breakeven after 1:1 or 1.5:1 gain, trail stops on strong trends, adjust TP if momentum extends",
                 "- CLOSE proactively: Don't wait for SL if market structure breaks, trend reverses, or thesis invalidates",
                 "- ADAPT to performance: If win rate is low, increase entry standards and risk/reward requirements",
-                "="*60,
+                "="*65,
             ])
         
         # Add brain context (distilled trading wisdom) if available
@@ -131,9 +140,63 @@ class TemplateManager:
         Returns:
             str: Formatted response template
         """
-        response_template = '''RESPONSE FORMAT:
+        response_template = '''=== MULTI-AGENT DEBATE STRUCTURE ===
 
-Provide analysis reasoning (2-4 paragraphs: technical indicators, patterns, market context), then output JSON:
+🔥 당신은 단일 AI가 아니라, 3명의 에이전트가 내부적으로 토론하는 구조입니다:
+
+**1단계: 공격적 에이전트 (Aggressive Agent) 의견 제시**
+- 역할: 5m/15m 타임프레임의 단기 에너지와 거래량 폭발에 주목
+- 질문: "지금 당장의 캔들 강도와 거래량이 상위 타임프레임 저항을 뚫을 만큼 강한가?"
+- 시각: 단기 모멘텀 돌파 기회를 찾는 트레이더
+- 출력 형식: "🔴 공격적 에이전트: [1-2문장으로 매수/매도 근거 제시]"
+
+**2단계: 보수적 에이전트 (Conservative Agent) 반박**
+- 역할: 12h/1d 타임프레임의 강력한 S/R 매물대와 확률적 리스크에 주목
+- 질문: "지금 진입하면 상위 타임프레임 저항에 막혀 손실날 확률은 얼마나 되는가?"
+- 시각: 손실 회피와 안전 마진을 중시하는 트레이더
+- 출력 형식: "🔵 보수적 에이전트: [1-2문장으로 공격적 의견에 반박 또는 동의]"
+
+**3단계: 심판 (Referee) 최종 판결**
+- 역할: 두 에이전트의 의견을 종합하여 최종 결정
+- 기준:
+  1. 손익비(R/R)가 2:1 이상 나오는가?
+  2. 저항 돌파 후 되돌림 테스트(Retest)로 안착 확인되었는가?
+  3. 주요 S/R 매물대 사이의 안전한 중립 지대인가?
+- 출력 형식: "⚖️ 심판 최종 판결: [BUY/SELL/HOLD 결정 + 2-3문장 근거]"
+
+**토론 규칙**:
+- 공격적 에이전트와 보수적 에이전트는 서로의 의견을 **반드시 인지**하고 반박/동의해야 함
+- 단순히 각자 의견만 나열하지 말고, "공격적 에이전트는 X라고 했지만, 실제로는 Y이므로 위험하다" 같은 상호작용 필수
+- 심판은 **양측의 의견을 직접 인용**하면서 최종 결정의 근거를 명확히 해야 함
+
+🎯 목표: 단일 관점의 편향을 피하고, 5m/15m/1h/4h/12h/1d의 **타임프레임 간 갈등**을 명시적으로 드러내는 것
+
+🔥 CRITICAL JSON RESPONSE FORMAT:
+
+**YOU MUST OUTPUT ONLY PURE JSON - NO TEXT BEFORE OR AFTER THE JSON BLOCK.**
+
+DO NOT write any explanations, reasoning, or analysis text BEFORE the JSON.
+DO NOT start your response with "Here is my analysis..." or similar phrases.
+Your response MUST begin IMMEDIATELY with the opening brace `{` and end with the closing brace `}`.
+
+CORRECT format:
+```json
+{
+    "analysis": { ... }
+}
+```
+
+INCORRECT format (will cause "Standard validation failed" error):
+"Based on the technical indicators and market context, here is my analysis:
+```json
+{
+    "analysis": { ... }
+}
+```"
+
+You may include your reasoning INSIDE the JSON in the "reasoning" field, but the response itself must be PURE JSON only.
+
+**START YOUR RESPONSE WITH `{` - Nothing else.**
 
 ```json
 {
@@ -204,17 +267,17 @@ If the 365D macro trend CONTRADICTS the trade direction:
 If both 365D and Weekly macro conflict: HOLD is strongly recommended unless catalyst is exceptional.
 
 TRADING SIGNALS & CONFIDENCE:
-- BUY (70-100 confidence): Strong multi-indicator confluence + volume confirmation + clear SL/TP + minimum 2:1 R/R preferred
-- SELL (70-100 confidence): Strong multi-indicator confluence + volume confirmation + clear SL/TP + minimum 2:1 R/R preferred
-- HOLD (any confidence <70): Mixed signals, weak trend, conflicting indicators, low volume, or insufficient setup quality
+- BUY (65-100 confidence): Multi-indicator confluence + volume confirmation + clear SL/TP + minimum 1.5:1 R/R (scalping acceptable)
+- SELL (65-100 confidence): Multi-indicator confluence + volume confirmation + clear SL/TP + minimum 1.5:1 R/R (scalping acceptable)
+- HOLD (confidence <65): Only when market is GENUINELY UNCLEAR or all timeframes conflict. Use sparingly - your job is to TRADE.
 - CLOSE: Exit position when SL/TP hit, signal reversal, or thesis invalidated
 - UPDATE: Adjust existing position SL/TP when market structure improves
 
-RISK/REWARD GUIDELINES:
-- R/R < 1.5: Very unfavorable - strongly consider HOLD
-- R/R 1.5-2.0: Borderline - only trade with exceptional confluence (4+)
-- R/R >= 2.0: Standard acceptable quality
-- R/R >= 2.5: Strong setup - preferred for counter-trend trades
+RISK/REWARD GUIDELINES (Scalping-Adjusted):
+- R/R >= 1.5: ACCEPTABLE for aggressive scalping - take the trade if confidence >= 65%
+- R/R >= 2.0: Good setup - preferred for standard trades
+- R/R >= 2.5: Strong setup - excellent for counter-trend trades
+- R/R < 1.5: Unfavorable - consider HOLD unless momentum is extremely strong
 
 RISK MANAGEMENT (Stop Loss & Take Profit):
 LONG trades:
@@ -263,8 +326,32 @@ ANALYSIS STEPS (use findings to determine trading signal):
 3. PATTERN RECOGNITION:
    Chart patterns (wedges, triangles, H&S, double tops/bottoms) | Divergences (price vs RSI/MACD) | Candlesticks (engulfing, doji, hammer, shooting star) | Fibonacci levels (50-period, pullback/extension zones) | Overbought/oversold extremes | Prioritize RECENT patterns
 
-4. SUPPORT/RESISTANCE:
-   Map key levels across timeframes | Historical reaction zones (multiple touches) | Technical confluences (S/R + Fib + SMA) | Volume profile (high nodes) | Calculate risk/reward for SL/TP placement
+4. SUPPORT/RESISTANCE (맥락과 벽을 읽는 핵심):
+
+   🔥 HIGH/LOW 기반 S/R 도출:
+   - 각 타임프레임의 High(고가)/Low(저가)로 핵심 S/R 라인 식별
+   - 5m/15m: 단기 지지/저항 (약한 벽) | 1h/4h: 중기 지지/저항 (중간 벽) | 12h/1d: 장기 지지/저항 (강한 벽)
+
+   🎯 타임프레임별 S/R 강도 구분 (중요도):
+   - **12h/1d S/R = 강력한 매물대** (돌파 어려움, 반전 확률 높음)
+   - **1h/4h S/R = 중간 저항선** (거래량 동반 시 돌파 가능)
+   - **5m/15m S/R = 약한 저항선** (에너지 충분하면 쉽게 돌파)
+
+   🔴 공격적 에이전트 S/R 질문:
+   "현재 5m/15m의 거래량 폭증과 캔들 강도가 1h/4h 저항선을 뚫기에 충분한가?
+    만약 뚫는다면, 돌파한 저항선이 새로운 지지선으로 전환될 가능성은?"
+
+   🔵 보수적 에이전트 S/R 질문:
+   "현재 가격이 12h/1d의 강력한 매물대(High Volume Node) 바로 아래에 있지는 않은가?
+    여기서 진입했을 때 저항에 막혀 하락할 확률(확률적 천장)은 얼마나 되는가?"
+
+   ⚖️ 심판 S/R 최종 판결 기준:
+   "단순히 지표가 좋다고 진입하지 마라. 다음 중 하나를 만족하는가?
+    1. 손익비가 나오는 지지선 근처인가? (SL 짧고 TP 김)
+    2. 저항선을 돌파하고 되돌림 테스트(Retest) 완료했는가? (안착 확인)
+    3. 주요 저항선 사이의 안전한 중립 지대인가?"
+
+   📊 Historical reaction zones (multiple touches) | Technical confluences (S/R + Fib + SMA) | Volume profile (high nodes) | Calculate risk/reward for SL/TP placement
 
 5. MARKET CONTEXT:
    Market Overview (global cap, dominance)"""

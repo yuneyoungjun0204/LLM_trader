@@ -158,10 +158,10 @@ class TechnicalCalculator:
         indicators["vortex_plus"] = vortex_plus
         indicators["vortex_minus"] = vortex_minus
         
-        # SMAs
+        # SMAs (🔥 200평선 → 100평선으로 변경)
         indicators["sma_20"] = self.ti.overlap.sma(self.ti.close, 20)
         indicators["sma_50"] = self.ti.overlap.sma(self.ti.close, 50)
-        indicators["sma_200"] = self.ti.overlap.sma(self.ti.close, 200)
+        indicators["sma_100"] = self.ti.overlap.sma(self.ti.close, 100)
         
         return indicators
 

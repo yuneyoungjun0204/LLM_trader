@@ -14,6 +14,26 @@ class BaseApiClient:
         self.base_url = base_url
         self.logger = logger
         self.session: Optional[aiohttp.ClientSession] = None
+
+    def __del__(self):
+        """Destructor to ensure session cleanup on garbage collection."""
+        if self.session and not self.session.closed:
+            # Session still open during garbage collection - warn and attempt cleanup
+            self.logger.warning(
+                f"{self.__class__.__name__} session not properly closed - forcing cleanup in destructor"
+            )
+            # Can't use await in __del__, but we can try to close synchronously
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Create a task to close the session
+                    loop.create_task(self.session.close())
+                else:
+                    # Loop is not running, close synchronously
+                    loop.run_until_complete(self.session.close())
+            except Exception as e:
+                self.logger.error(f"Failed to close session in destructor: {e}")
     
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -28,7 +48,12 @@ class BaseApiClient:
             try:
                 self.logger.debug(f"Closing {self.__class__.__name__} session")
                 await self.session.close()
+                # 🔥 CRITICAL: Wait for session connectors to fully close
+                # This prevents "Unclosed client session" warnings
+                import asyncio
+                await asyncio.sleep(0.1)  # Give aiohttp time to cleanup connectors
                 self.session = None
+                self.logger.debug(f"✅ {self.__class__.__name__} session closed successfully")
             except Exception as e:
                 self.logger.error(f"Error closing session in {self.__class__.__name__}: {e}")
     

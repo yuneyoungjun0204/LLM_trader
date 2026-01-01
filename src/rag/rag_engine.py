@@ -146,13 +146,17 @@ class RagEngine:
             self.category_manager.get_category_word_map()
         )
 
-    async def update_if_needed(self) -> bool:
-        """Update market data if needed based on time intervals"""
+    async def update_if_needed(self, target_coin: Optional[str] = None) -> bool:
+        """Update market data if needed based on time intervals
+
+        Args:
+            target_coin: Optional coin being analyzed (e.g., "PEPE") to prioritize in news fetch
+        """
         async with self._update_lock:
             if not self.last_update:
                 self.logger.debug("No previous update, refreshing market knowledge base")
                 try:
-                    await self.refresh_market_data()
+                    await self.refresh_market_data(target_coin=target_coin)
                     self.last_update = datetime.now()
                     return True
                 except Exception as e:
@@ -163,7 +167,7 @@ class RagEngine:
             if time_since_update > self.update_interval:
                 self.logger.debug(f"Last update was {time_since_update.total_seconds()/60:.1f} minutes ago, refreshing market knowledge")
                 try:
-                    await self.refresh_market_data()
+                    await self.refresh_market_data(target_coin=target_coin)
                     self.last_update = datetime.now()
                     return True
                 except Exception as e:
@@ -179,14 +183,20 @@ class RagEngine:
 
             return False
 
-    async def refresh_market_data(self) -> None:
-        """Refresh all market data from external sources"""
+    async def refresh_market_data(self, target_coin: Optional[str] = None) -> None:
+        """Refresh all market data from external sources
+
+        Args:
+            target_coin: Optional coin being analyzed (e.g., "PEPE") to prioritize in news fetch
+        """
         await self.category_manager.ensure_categories_updated()
-        
+
         # Fetch news
         try:
+            # 🔥 DYNAMIC: Pass target_coin to prioritize relevant news
             articles = await self.news_manager.fetch_fresh_news(
-                self.category_manager.get_known_tickers()
+                self.category_manager.get_known_tickers(),
+                target_coin=target_coin
             )
         except Exception as e:
             self.logger.error(f"Error fetching crypto news: {e}")
@@ -229,7 +239,9 @@ class RagEngine:
                 self._build_indices()
 
             if not self.last_update or datetime.now() - self.last_update > timedelta(minutes=30):
-                await self.update_if_needed()
+                # 🔥 DYNAMIC: Extract target coin from symbol and pass to update
+                target_coin = self.category_manager.extract_base_coin(symbol) if symbol else None
+                await self.update_if_needed(target_coin=target_coin)
 
             # Extract keywords from query for smart sentence selection
             import re

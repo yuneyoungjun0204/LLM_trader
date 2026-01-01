@@ -7,6 +7,7 @@ from .market_overview_formatter import MarketOverviewFormatter
 from .market_period_formatter import MarketPeriodFormatter
 from .long_term_formatter import LongTermFormatter
 from .technical_formatter import TechnicalFormatter
+from .multi_timeframe_formatter import MultiTimeframeFormatter
 
 __all__ = [
     "MarketFormatter",
@@ -14,4 +15,5 @@ __all__ = [
     "MarketPeriodFormatter",
     "LongTermFormatter",
     "TechnicalFormatter",
+    "MultiTimeframeFormatter",
 ]

@@ -43,30 +43,32 @@ class CryptoCompareNewsAPI:
     
     @retry_api_call(max_retries=3)
     async def get_latest_news(
-        self, 
-        limit: int = 50, 
+        self,
+        limit: int = 50,
         max_age_hours: int = 24,
         session: Optional[aiohttp.ClientSession] = None,
-        api_categories: Optional[List[Dict[str, Any]]] = None
+        api_categories: Optional[List[Dict[str, Any]]] = None,
+        target_coin: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get latest cryptocurrency news articles
-        
+
         Args:
             limit: Maximum number of articles to return
             max_age_hours: Maximum age of articles in hours
             session: Optional aiohttp session to use
             api_categories: Optional list of API categories for filtering
-            
+            target_coin: Optional coin being analyzed (e.g., "PEPE") to prioritize in categories
+
         Returns:
             List of news articles
         """
         current_time = datetime.now()
         cutoff_time = current_time - timedelta(hours=max_age_hours)
-        
+
         # Check if we need to update
         if self.cache.should_fetch_fresh_news(self.update_interval):
-            return await self._fetch_and_process_fresh_news(limit, cutoff_time, session, api_categories)
+            return await self._fetch_and_process_fresh_news(limit, cutoff_time, session, api_categories, target_coin)
         else:
             # Use cached data if it's recent enough
             return self.cache.get_cached_news(limit, cutoff_time)
@@ -120,11 +122,12 @@ class CryptoCompareNewsAPI:
         limit: int,
         cutoff_time: datetime,
         session: Optional[aiohttp.ClientSession],
-        api_categories: Optional[List[Dict[str, Any]]]
+        api_categories: Optional[List[Dict[str, Any]]],
+        target_coin: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Fetch fresh news from API and process it"""
         self.logger.debug("Fetching fresh news data from CryptoCompare")
-        articles = await self.client.fetch_news(session, api_categories)
+        articles = await self.client.fetch_news(session, api_categories, target_coin)
         
         if articles:
             # Process fresh articles
