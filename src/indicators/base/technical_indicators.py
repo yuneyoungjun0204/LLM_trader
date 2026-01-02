@@ -7,7 +7,7 @@ from .indicator_base import IndicatorBase
 from .indicator_categories import (
     MomentumIndicators, OverlapIndicators, PriceTransformIndicators,
     SentimentIndicators, StatisticalIndicators, SupportResistanceIndicators,
-    TrendIndicators, VolatilityIndicators, VolumeIndicators
+    TrendIndicators, VolatilityIndicators, VolumeIndicators, DivergenceIndicators
 )
 
 
@@ -23,6 +23,7 @@ class TechnicalIndicators:
         self.trend = TrendIndicators(self._base)
         self.volatility = VolatilityIndicators(self._base)
         self.vol = VolumeIndicators(self._base)
+        self.divergence = DivergenceIndicators(self._base)
 
     @property
     def open(self) -> np.ndarray:

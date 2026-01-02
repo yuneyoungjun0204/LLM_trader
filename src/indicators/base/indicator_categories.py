@@ -847,3 +847,41 @@ class VolumeIndicators(IndicatorCategory['VolumeIndicators']):
             self.volume, window_size,
             required_length=window_size
         )
+
+
+class DivergenceIndicators(IndicatorCategory['DivergenceIndicators']):
+    """Advanced Divergence Detection for Trend Analysis"""
+
+    def detect_regular_divergence(self, price: np.ndarray, indicator: np.ndarray,
+                                  lookback: int = 60, pivot_bars: int = 5) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Detect Regular Divergence (Trend Reversal Signal)
+
+        Args:
+            price: Price array
+            indicator: Indicator array (Stochastic %K, RSI, MACD Histogram)
+            lookback: Maximum bars to look back
+            pivot_bars: Bars for pivot detection
+
+        Returns:
+            Tuple of (bullish_div, bearish_div, strength)
+        """
+        from src.indicators.divergence.divergence_indicators import detect_regular_divergence
+        return detect_regular_divergence(price, indicator, lookback, pivot_bars)
+
+    def detect_hidden_divergence(self, price: np.ndarray, indicator: np.ndarray,
+                                 lookback: int = 60, pivot_bars: int = 5) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Detect Hidden Divergence (Trend Continuation Signal)
+
+        Args:
+            price: Price array
+            indicator: Indicator array
+            lookback: Maximum bars to look back
+            pivot_bars: Bars for pivot detection
+
+        Returns:
+            Tuple of (hidden_bullish_div, hidden_bearish_div, strength)
+        """
+        from src.indicators.divergence.divergence_indicators import detect_hidden_divergence
+        return detect_hidden_divergence(price, indicator, lookback, pivot_bars)

@@ -181,6 +181,16 @@ class PromptBuilder:
                 sections.append(alignment_summary)
                 if self.logger:
                     self.logger.info("MTF alignment analysis added to prompt")
+
+        # Add divergence signals if available
+        if hasattr(context, 'divergence_signals') and context.divergence_signals:
+            divergence_summary = MultiTimeframeFormatter.format_divergence_signals(
+                context.divergence_signals
+            )
+            if divergence_summary:
+                sections.append(divergence_summary)
+                if self.logger:
+                    self.logger.info("Divergence signals added to prompt")
         else:
             if self.logger:
                 has_attr = hasattr(context, 'multi_timeframe_data')

@@ -39,6 +39,9 @@ class AnalysisContext:
         
         # Cryptocurrency details
         self._coin_details = {}
+
+        # Divergence signals
+        self._divergence_signals = {}
         
     @property
     def symbol(self) -> str:
@@ -234,3 +237,15 @@ class AnalysisContext:
         if not isinstance(value, dict):
             raise TypeError("Coin details must be a dictionary")
         self._coin_details = value
+
+    @property
+    def divergence_signals(self) -> Dict[str, Any]:
+        """Get divergence signals (Stochastic, RSI, MACD)"""
+        return self._divergence_signals
+
+    @divergence_signals.setter
+    def divergence_signals(self, value: Dict[str, Any]):
+        """Set divergence signals"""
+        if not isinstance(value, dict):
+            raise TypeError("Divergence signals must be a dictionary")
+        self._divergence_signals = value

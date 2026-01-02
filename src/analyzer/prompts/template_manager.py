@@ -157,6 +157,62 @@ class TemplateManager:
             "  - After breakout: Use opposite band as dynamic stop loss level",
             "  - Band walk (price riding upper/lower band): Strong trend, maintain position until band penetration reverses",
             "",
+            "🎯 DIVERGENCE-BASED PRECISION ENTRY SYSTEM:",
+            "Distinguish between trend reversal (Regular) and trend continuation (Hidden) using Stochastic, RSI, MACD divergence.",
+            "- **Data Source:** Divergence signals are calculated on FILTER_TIMEFRAMES[1] (30m) timeframe for optimal balance.",
+            "",
+            "🔥 STOCHASTIC + RSI PARALLEL FILTER (False Breakout Prevention):",
+            "- **Core Principle**: RSI measures 'speed' (momentum velocity), Stochastic measures 'position' (price location within recent range)",
+            "- **Critical Rule - LONG Entry**:",
+            "  - ⚠️ AVOID LONG entry if BOTH RSI > 80 AND Stochastic > 80 (both overbought)",
+            "  - Reason: Price is at extreme high position AND extreme momentum → Worst possible LONG timing",
+            "  - Action: If both overbought, REJECT LONG signal or reduce confidence by -15%",
+            "  - Exception: Only allow if Hidden Bullish Divergence + strong volume breakout confirms reversal",
+            "- **Critical Rule - SHORT Entry**:",
+            "  - ⚠️ AVOID SHORT entry if BOTH RSI < 20 AND Stochastic < 20 (both oversold)",
+            "  - Reason: Price is at extreme low position AND extreme momentum → Worst possible SHORT timing",
+            "  - Action: If both oversold, REJECT SHORT signal or reduce confidence by -15%",
+            "  - Exception: Only allow if Hidden Bearish Divergence + strong volume breakdown confirms reversal",
+            "- **Use Case**: Filters fake breakouts where price appears to break resistance/support but indicators show exhaustion",
+            "- **Effect**: Prevents buying at peaks or selling at bottoms, significantly improves win rate",
+            "",
+            "- **Regular Divergence (Trend Reversal - End of Move):**",
+            "  - Bullish Regular: Price lower low + Indicator higher low → Potential upward reversal (⚠️ downtrend exhaustion)",
+            "  - Bearish Regular: Price higher high + Indicator lower high → Potential downward reversal (⚠️ uptrend exhaustion)",
+            "  - Use Case: Exit existing position or counter-trend entry (RISKY - require 70%+ confidence)",
+            "- **Hidden Divergence (Trend Continuation - Buy the Dip/Sell the Rally):",
+            "  - Hidden Bullish: Price higher low + Indicator lower low → Uptrend pullback, BUY THE DIP (✅ HIGH PRIORITY)",
+            "  - Hidden Bearish: Price lower high + Indicator higher high → Downtrend bounce, SELL THE RALLY (✅ HIGH PRIORITY)",
+            "  - Use Case: Best entry points for trend-following trades",
+            "",
+            "🔥 STRATEGIC ENTRY SCENARIOS (MUST FOLLOW):",
+            "**LONG Entry Priority (Ranked):**",
+            "  1. ✅ HIGHEST: BB Trend 'above_middle' + Hidden Bullish Divergence + Stoch Golden Cross near 20 (Confidence: 75-85%)",
+            "  2. ✅ HIGH: BB Trend 'above_middle' + Hidden Bullish Divergence (no cross yet) (Confidence: 65-75%)",
+            "  3. ⚠️ MEDIUM: Hidden Bullish Divergence alone + Volume confirmation (Confidence: 55-65%)",
+            "  4. ⚠️ LOW: Regular Bullish Divergence (reversal signal, needs strong confirmation) (Confidence: 45-55%)",
+            "",
+            "**🚫 LONG Entry BLOCKED if**:",
+            "  - RSI > 80 AND Stochastic > 80 (both extreme overbought) → Worst timing, REJECT or -15% confidence penalty",
+            "",
+            "**SHORT Entry Priority (Ranked):**",
+            "  1. ✅ HIGHEST: BB Trend 'below_middle' + Hidden Bearish Divergence + Stoch Death Cross near 80 (Confidence: 75-85%)",
+            "  2. ✅ HIGH: BB Trend 'below_middle' + Hidden Bearish Divergence (no cross yet) (Confidence: 65-75%)",
+            "  3. ⚠️ MEDIUM: Hidden Bearish Divergence alone + Volume confirmation (Confidence: 55-65%)",
+            "  4. ⚠️ LOW: Regular Bearish Divergence (reversal signal, needs strong confirmation) (Confidence: 45-55%)",
+            "",
+            "**🚫 SHORT Entry BLOCKED if**:",
+            "  - RSI < 20 AND Stochastic < 20 (both extreme oversold) → Worst timing, REJECT or -15% confidence penalty",
+            "",
+            "📈 DIVERGENCE CROSS-VALIDATION:",
+            "- **Triple Confirmation (Strongest):** Stochastic + RSI + MACD all show same divergence → Add +15% confidence",
+            "- **Double Confirmation (Strong):** Any 2 indicators show same divergence → Add +10% confidence",
+            "- **Single Confirmation (Moderate):** Only 1 indicator shows divergence → Add +5% confidence",
+            "- **Divergence Strength:** Use 'regular_strength' and 'hidden_strength' scores (0-100) to gauge reliability",
+            "  - Strength > 70: Very strong divergence, highly reliable",
+            "  - Strength 40-70: Moderate divergence, use with other confirmations",
+            "  - Strength < 40: Weak divergence, ignore or require multiple confirmations",
+            "",
             "YOUR TASK:",
             "Analyze technical indicators, price action, volume, patterns, provided chart if available, market sentiment, and news.",
             "Provide a clear trading decision: BUY (long), SELL (short), HOLD (no action), or CLOSE (exit position).",
@@ -325,23 +381,73 @@ You may include your reasoning INSIDE the JSON in the "reasoning" field, but the
 }}
 ```
 
+⚠️⚠️⚠️ BEFORE OUTPUTTING THE JSON ABOVE, VERIFY: ⚠️⚠️⚠️
+- If signal = "BUY" (LONG): stop_loss < entry_price AND take_profit > entry_price? → If NO, fix it or change to HOLD
+- If signal = "SELL" (SHORT): stop_loss > entry_price AND take_profit < entry_price? → If NO, fix it or change to HOLD
+- entry_price MUST equal current_price from the market data
+- Invalid TP/SL will cause the trade to be REJECTED by the system
+
 🔥 CRITICAL: DIRECTION FIELD MAPPING (MANDATORY):
 - If signal = "BUY", then direction MUST be "LONG"
 - If signal = "SELL", then direction MUST be "SHORT"
 - If signal = "HOLD" or "CLOSE", then direction = "NEUTRAL"
 - NEVER output "N/A" or leave direction empty. Always map signal to direction explicitly.
 
-🔥 CRITICAL: STOP LOSS & TAKE PROFIT VALIDATION (MANDATORY - CHECK BEFORE OUTPUT):
-Before outputting JSON, verify:
-- For LONG (BUY): stop_loss MUST be < entry_price, take_profit MUST be > entry_price
-- For SHORT (SELL): stop_loss MUST be > entry_price, take_profit MUST be < entry_price
-- If you cannot determine valid SL/TP that follow these rules, output HOLD instead of BUY/SELL
+🔥🔥🔥 CRITICAL: STOP LOSS & TAKE PROFIT VALIDATION (MANDATORY - CHECK BEFORE OUTPUT) 🔥🔥🔥
 
-Example validation:
-- LONG: entry_price = 100, stop_loss = 97 ✅ (97 < 100), take_profit = 103 ✅ (103 > 100)
-- LONG: entry_price = 100, stop_loss = 102 ❌ (102 > 100) → WRONG! Fix or use HOLD
-- SHORT: entry_price = 100, stop_loss = 103 ✅ (103 > 100), take_profit = 97 ✅ (97 < 100)
-- SHORT: entry_price = 100, stop_loss = 98 ❌ (98 < 100) → WRONG! Fix or use HOLD
+⚠️⚠️⚠️ YOU MUST VERIFY THESE RULES BEFORE OUTPUTTING JSON. INVALID TP/SL WILL CAUSE TRADES TO BE REJECTED. ⚠️⚠️⚠️
+
+**STEP-BY-STEP VALIDATION PROCESS:**
+
+1. **Determine entry_price**: entry_price = current_price (use the current price from the market data)
+
+2. **For LONG (BUY) trades**:
+   - ✅ CORRECT: stop_loss MUST be < entry_price, take_profit MUST be > entry_price
+   - ❌ WRONG: stop_loss >= entry_price OR take_profit <= entry_price
+   - Logic: We buy at entry_price, SL below (if price drops, we lose), TP above (if price rises, we profit)
+
+3. **For SHORT (SELL) trades**:
+   - ✅ CORRECT: stop_loss MUST be > entry_price, take_profit MUST be < entry_price
+   - ❌ WRONG: stop_loss <= entry_price OR take_profit >= entry_price
+   - Logic: We sell at entry_price, SL above (if price rises, we lose), TP below (if price falls, we profit)
+
+4. **FINAL CHECK** (Repeat this in your head before outputting JSON):
+   - If BUY: Ask "Is SL < entry_price AND TP > entry_price?" → If NO, fix it or use HOLD
+   - If SELL: Ask "Is SL > entry_price AND TP < entry_price?" → If NO, fix it or use HOLD
+
+**REAL EXAMPLES:**
+
+✅ CORRECT LONG Example:
+- Current price = 87316.0 (entry_price = 87316.0)
+- stop_loss = 86410.6 ✅ (86410.6 < 87316.0) - CORRECT
+- take_profit = 87800.0 ✅ (87800.0 > 87316.0) - CORRECT
+→ Trade will be accepted
+
+❌ WRONG LONG Example:
+- Current price = 87316.0 (entry_price = 87316.0)
+- stop_loss = 88000.0 ❌ (88000.0 > 87316.0) - WRONG!
+- take_profit = 87000.0 ❌ (87000.0 < 87316.0) - WRONG!
+→ Trade will be REJECTED
+
+✅ CORRECT SHORT Example:
+- Current price = 87316.0 (entry_price = 87316.0)
+- stop_loss = 87764.52 ✅ (87764.52 > 87316.0) - CORRECT
+- take_profit = 86888.0 ✅ (86888.0 < 87316.0) - CORRECT
+→ Trade will be accepted
+
+❌ WRONG SHORT Example (THIS IS THE COMMON MISTAKE):
+- Current price = 87316.0 (entry_price = 87316.0)
+- stop_loss = 86888.0 ❌ (86888.0 < 87316.0) - WRONG! SL must be ABOVE entry
+- take_profit = 87764.52 ❌ (87764.52 > 87316.0) - WRONG! TP must be BELOW entry
+→ Trade will be REJECTED
+
+**COMMON MISTAKES TO AVOID:**
+- ❌ DO NOT confuse LONG and SHORT rules
+- ❌ DO NOT use LONG rules for SHORT trades (or vice versa)
+- ❌ DO NOT output TP/SL values without verifying they follow the rules above
+- ✅ ALWAYS check: "If I enter at entry_price, does this SL/TP make logical sense?"
+
+**IF YOU CANNOT DETERMINE VALID SL/TP**: Output HOLD instead of BUY/SELL
 
 CONFLUENCE SCORING & CONFIDENCE CALCULATION:
 
@@ -366,6 +472,16 @@ Step 3: Apply adjustments based on timeframe alignment:
 Step 4: Apply Filter wall penalties (only if very close):
 - {hard_wall_str} High/Low within 0.5%: Reduce by -5% (but don't go below 30% if other factors are strong)
 - {hard_wall_str} High/Low within 0.5-1%: Reduce by -3% (but strong Trigger can override)
+
+Step 4.5: Apply Choppiness Index adjustments:
+- Choppiness > 61.8 (Choppy market): Reduce confidence by -10% (wide stops required or HOLD)
+- Choppiness < 38.2 (Trending market): Add +5% confidence (tight stops possible, maximize profits)
+- Choppiness 38.2-61.8: No adjustment (transitional state)
+
+Step 4.6: Apply Stochastic + RSI parallel filter:
+- LONG entry + RSI > 80 AND Stochastic > 80: Reduce confidence by -15% (worst timing, prefer HOLD)
+- SHORT entry + RSI < 20 AND Stochastic < 20: Reduce confidence by -15% (worst timing, prefer HOLD)
+- Exception: Hidden Divergence + strong volume can override with explicit justification
 
 Step 5: Final confidence range:
 - If you have ANY valid setup (2+ timeframes OR strong Trigger): MINIMUM confidence = 30% (NOT 40%!)
@@ -394,10 +510,27 @@ ADX + CHOPPINESS ASSESSMENT:
 - ADX 20-25: Developing trend. Standard 3+ confluences required.
 - ADX > 25: Strong trend environment. Full confidence range available.
 
-CHOPPINESS INDEX CONTEXT:
-- Choppiness > 61.8: Ranging market - trend-following strategies may underperform
-- Choppiness < 38.2: Trending market - breakouts/trend continuation favored
-- Choppiness 38-62: Transitional - exercise caution
+CHOPPINESS INDEX CONTEXT (Market Efficiency Indicator):
+- **Choppiness > 61.8: Ranging/Choppy Market** ⚠️
+  - Market is very irregular and sideways
+  - **Action Required**: Either HOLD (preferred) OR widen stop loss significantly (2-3x normal distance)
+  - Reason: Tight stops get hit frequently in choppy markets, causing "slicing" (gradual account erosion)
+  - Confidence penalty: Reduce confidence by -10% for trend-following trades
+  - SL/TP adjustment: Use wider stops (3-4% instead of 1-2%) to avoid false breakouts
+  - Exception: Only trade if BB Squeeze + confirmed breakout with strong volume
+  
+- **Choppiness < 38.2: Trending Market** ✅
+  - Clear trend is established
+  - **Action Required**: Use tight stop loss to maximize profits (normal or tighter SL distances)
+  - Reason: Strong directional movement allows tighter risk management
+  - Confidence bonus: Add +5% confidence for trend-following trades
+  - SL/TP adjustment: Use tighter stops (1-2% normal distance) for better R/R
+  - Preferred: This is the optimal environment for our strategy
+  
+- **Choppiness 38.2-61.8: Transitional State**
+  - Market is transitioning between trending and choppy
+  - **Action Required**: Exercise caution, use standard SL/TP distances
+  - Reason: Unclear market state requires balanced approach
 
 NOTE: You may OVERRIDE these guidelines if you have exceptionally strong conviction (e.g., major news catalyst, 5+ confluences, extreme oversold/overbought). When overriding, explicitly state your reasoning. HOWEVER, Filter-level wall restrictions ({hard_wall_str} High/Low) CANNOT be overridden.
 
@@ -439,6 +572,36 @@ RISK/REWARD GUIDELINES (Unified Standard):
 
 RISK MANAGEMENT (Stop Loss & Take Profit):
 
+🔥 CHOPPINESS INDEX-BASED SL/TP DISTANCE ADJUSTMENT:
+- **Choppiness > 61.8 (Choppy Market)**: 
+  - Use WIDE stops: 3-4% distance (instead of normal 1-2%)
+  - Reason: Tight stops get hit frequently in choppy markets → "Slicing" (gradual account erosion)
+  - Alternative: HOLD until Choppiness < 61.8 or confirmed breakout
+  - TP can also be wider but maintain R/R >= 1.5:1
+  
+- **Choppiness < 38.2 (Trending Market)**:
+  - Use TIGHT stops: 1-2% distance (normal or tighter)
+  - Reason: Strong directional movement allows tighter risk management → Maximize profits
+  - This is the optimal environment for our strategy
+  - TP can be tighter but maintain R/R >= 1.5:1
+  
+- **Choppiness 38.2-61.8 (Transitional)**:
+  - Use STANDARD stops: 2-3% distance
+  - Balanced approach for unclear market state
+
+🔥 VOLUME PROFILE / VWAP-BASED SL/TP PLACEMENT:
+- **POC (Point of Control)**: Primary S/R level from Volume Profile
+  - LONG SL: Place below POC or high volume nodes (strong support)
+  - SHORT SL: Place above POC or high volume nodes (strong resistance)
+  - TP: Target next high volume node or beyond for extended moves
+  
+- **VWAP as Dynamic S/R**:
+  - LONG: VWAP below price = support, use as trailing stop reference
+  - SHORT: VWAP above price = resistance, use as trailing stop reference
+  - VWAP crossovers (price crossing VWAP) = Trend change signals → Consider position exit
+  
+- **Priority**: When Volume Profile/VWAP data is available, prioritize these over simple High/Low levels
+
 🔥 CRITICAL: STOP LOSS DIRECTION RULES (MANDATORY - NO EXCEPTIONS):
 
 LONG trades (BUY signal):
@@ -453,20 +616,49 @@ LONG trades (BUY signal):
 - CRITICAL: If TP targets {hard_wall_str} High, ensure confirmed breakout first, otherwise reduce position size
 
 SHORT trades (SELL signal):
-- 🔥 SL MUST be ABOVE current_price (SL > current_price) - If price rises above SL, we lose money
-- 🔥 TP MUST be BELOW current_price (TP < current_price) - If price falls below TP, we profit
+- 🔥🔥🔥 SL MUST be ABOVE current_price (SL > current_price) - If price rises above SL, we lose money
+- 🔥🔥🔥 TP MUST be BELOW current_price (TP < current_price) - If price falls below TP, we profit
+- ⚠️⚠️⚠️ CRITICAL: For SHORT, TP < current_price is MANDATORY. If you set TP >= current_price, the trade WILL BE REJECTED.
 - SL Calculation: Above swing high + 1x ATR buffer (max 2-3% from entry)
 - Example: Current price = $100, Swing High = $103, ATR = $1 → SL = $104 (ABOVE $100) ✅
 - ❌ WRONG: SL = $98 (BELOW $100) - This is ILLEGAL for SHORT trades
 - TP Calculation: Key support levels within 100-candle High/Low box, Fibonacci (0.382/0.236/0.0), previous lows
 - Example: Current price = $100 → TP = $97-$98 (BELOW $100) ✅
-- ❌ WRONG: TP = $102-$105 (ABOVE $100) - This is ILLEGAL for SHORT trades
+- ❌ WRONG: TP = $102-$105 (ABOVE $100) - This is ILLEGAL for SHORT trades - Trade will be REJECTED
+- ❌ WRONG: TP = $100 (EQUALS current_price) - This is ILLEGAL - Trade will be REJECTED
 - CRITICAL: If TP targets {hard_wall_str} Low, ensure confirmed breakdown first, otherwise reduce position size
+- **MOST COMMON ERROR**: Setting TP = current_price or TP > current_price for SHORT. ALWAYS verify TP < current_price before outputting.
 
-🔥 VALIDATION CHECKLIST (Before outputting JSON):
-1. For LONG (BUY): Is SL < current_price? Is TP > current_price? If NO → FIX IT
-2. For SHORT (SELL): Is SL > current_price? Is TP < current_price? If NO → FIX IT
-3. If you cannot determine valid SL/TP, DO NOT output BUY/SELL - output HOLD instead
+🔥🔥🔥 MANDATORY VALIDATION CHECKLIST (MUST VERIFY BEFORE OUTPUTTING JSON) 🔥🔥🔥
+
+**BEFORE YOU OUTPUT THE JSON, ANSWER THESE QUESTIONS:**
+
+1. **What is the current_price?** (Check the market data provided)
+
+2. **For LONG (BUY) trades:**
+   - Is stop_loss < current_price? → If NO, you MUST fix it or use HOLD
+   - Is take_profit > current_price? → If NO, you MUST fix it or use HOLD
+   - Example check: current_price = 87316, SL = 86410, TP = 87800
+     - 86410 < 87316? YES ✅
+     - 87800 > 87316? YES ✅
+     - → Valid, can proceed
+
+3. **For SHORT (SELL) trades:**
+   - Is stop_loss > current_price? → If NO, you MUST fix it or use HOLD
+   - Is take_profit < current_price? → If NO, you MUST fix it or use HOLD
+   - ⚠️ COMMON MISTAKE: Do NOT set TP > current_price for SHORT!
+   - Example check: current_price = 87316, SL = 87764, TP = 86888
+     - 87764 > 87316? YES ✅
+     - 86888 < 87316? YES ✅
+     - → Valid, can proceed
+
+4. **Final verification:**
+   - Re-read your JSON output
+   - Check that entry_price = current_price
+   - Verify SL and TP follow the rules above
+   - If ANY check fails, fix it or change signal to HOLD
+
+**REMEMBER**: Invalid TP/SL values will cause the entire trade to be rejected. Double-check before outputting!
 
 Mandatory: All trades require stops based on technical levels (not arbitrary %), accounting for ATR volatility, positioned to invalidate thesis if hit.'''
         
@@ -533,7 +725,23 @@ DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d
    - If Filter wall is close (0.5-1%): Cap confidence at 65%, but strong Trigger can override
 
 2. TECHNICAL INDICATORS:
-   Momentum: RSI (<30/>70), MACD (crosses, histogram) | Trend: ADX (>25), DI+/DI- | Volatility: ATR, Bollinger Bands | Volume: MFI, OBV, Force Index | SMAs: 20/50/200 crosses | Advanced: TSI, Vortex, PFE, RMI, Ultimate, Supertrend | Assess confluence (strong) vs divergence (weak)
+   Momentum: RSI (<30/>70), MACD (crosses, histogram) | Trend: ADX (>25), DI+/DI- | Volatility: ATR, Bollinger Bands, Choppiness Index | Volume: MFI, OBV, Force Index, VWAP, Volume Profile | SMAs: 20/50/200 crosses | Advanced: TSI, Vortex, PFE, RMI, Ultimate, Supertrend | Assess confluence (strong) vs divergence (weak)
+   
+   **🔥 CRITICAL: STOCHASTIC + RSI PARALLEL CHECK** (Before ANY entry decision):
+   - **For LONG**: Check if RSI > 80 AND Stochastic > 80 → If YES, REJECT or apply -15% confidence penalty
+   - **For SHORT**: Check if RSI < 20 AND Stochastic < 20 → If YES, REJECT or apply -15% confidence penalty
+   - This prevents buying at peaks or selling at bottoms (worst possible timing)
+   
+   **🔥 CRITICAL: CHOPPINESS INDEX SL/TP ADJUSTMENT** (Before setting SL/TP):
+   - **Choppiness > 61.8**: Use wide stops (3-4% distance) or HOLD → Choppy market requires wider stops
+   - **Choppiness < 38.2**: Use tight stops (1-2% distance) → Trending market allows tighter risk management
+   - **Choppiness 38.2-61.8**: Use standard stops (2-3% distance) → Transitional state
+   
+   **🔥 VOLUME PROFILE / VWAP PRIORITY S/R**:
+   - **POC (Point of Control)**: Primary S/R level (highest volume price) → Use for SL/TP placement
+   - **VWAP**: Price > VWAP = bullish (LONG bias), Price < VWAP = bearish (SHORT bias)
+   - **High Volume Nodes**: Secondary S/R levels → Support for SL/TP
+   - Prioritize Volume Profile/VWAP S/R over simple High/Low levels when available
 
 3. PATTERN RECOGNITION:
    Chart patterns (wedges, triangles, H&S, double tops/bottoms) | Divergences (price vs RSI/MACD) | Candlesticks (engulfing, doji, hammer, shooting star) | Fibonacci levels (50-period, pullback/extension zones) | Overbought/oversold extremes | Prioritize RECENT patterns within the 100-candle scope
@@ -575,6 +783,23 @@ DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d
     5. Are at least 2 timeframes aligned? (2 timeframes = 55%+, 3 timeframes = 60%+ preferred)"
 
    📊 Historical reaction zones (multiple touches within 100 candles) | Technical confluences (S/R + Fib + SMA within box) | Volume profile (high nodes within box) | Calculate risk/reward for SL/TP placement using 100-candle High/Low boundaries
+   
+   🔥 VOLUME PROFILE & VWAP ANALYSIS (Volume-Weighted Support/Resistance):
+   - **Volume Profile**: Price-level volume distribution showing where most trading occurred
+     - **POC (Point of Control)**: Price level with highest volume → Strongest support/resistance
+     - High volume nodes (above-average volume at price levels) = Strong S/R zones
+     - Low volume nodes (below-average volume) = Easy breakout zones
+     - Use POC and high volume nodes as primary S/R for SL/TP placement
+   - **VWAP (Volume-Weighted Average Price)**: Institutional trader benchmark
+     - **Price > VWAP**: Bullish bias, VWAP acts as support → Prefer LONG entries
+     - **Price < VWAP**: Bearish bias, VWAP acts as resistance → Prefer SHORT entries
+     - VWAP pullbacks in trending markets = High-quality entry points
+     - VWAP crossovers (price crossing above/below VWAP) = Trend change signals
+   - **SL/TP Strategy with Volume Profile/VWAP**:
+     - Place SL below POC or high volume nodes for LONG
+     - Place SL above POC or high volume nodes for SHORT
+     - Target TP at next high volume node or beyond for extended moves
+     - VWAP can serve as dynamic support/resistance for trailing stops
 
 5. MARKET CONTEXT:"""
         
@@ -627,6 +852,16 @@ DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d
    **STEP 4: Apply Filter wall penalty (only if very close)**:
    - {hard_wall_str} within 0.5%: -5% (but don't go below 30% if other factors strong)
    - {hard_wall_str} within 0.5-1%: -3% (strong Trigger can override)
+   
+   **STEP 4.5: Apply Choppiness Index adjustment**:
+   - Choppiness > 61.8: -10% (choppy market, requires wide stops or HOLD)
+   - Choppiness < 38.2: +5% (trending market, allows tight stops, maximize profits)
+   - Choppiness 38.2-61.8: No adjustment (transitional state)
+   
+   **STEP 4.6: Apply Stochastic + RSI parallel filter**:
+   - LONG + RSI > 80 AND Stochastic > 80: -15% (worst timing, avoid buying at peaks)
+   - SHORT + RSI < 20 AND Stochastic < 20: -15% (worst timing, avoid selling at bottoms)
+   - Exception: Hidden Divergence + strong volume breakout can override with explicit justification
    
    **STEP 5: Final confidence range**:
    - VALID setup (2+ timeframes OR strong Trigger): MINIMUM = 30%

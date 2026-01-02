@@ -179,3 +179,108 @@ class MultiTimeframeFormatter:
             lines.append(f"{tf.upper()}: ${close:,.2f} ({change_pct:+.1f}%) Vol:{volume:,.0f}")
 
         return " | ".join(lines)
+
+    @staticmethod
+    def format_divergence_signals(divergence_data: Dict[str, Any]) -> str:
+        """
+        Format divergence signals for AI consumption
+
+        Args:
+            divergence_data: Divergence analysis results from debate_agent
+
+        Returns:
+            Formatted string with clear divergence information
+        """
+        if not divergence_data or 'timeframe' not in divergence_data:
+            return ""
+
+        tf = divergence_data.get('timeframe', 'unknown')
+        lines = [f"\n🎯 DIVERGENCE ANALYSIS (Timeframe: {tf.upper()})"]
+        lines.append("=" * 90)
+
+        # Stochastic Divergence
+        stoch = divergence_data.get('stochastic', {})
+        lines.append(f"\n📊 Stochastic Divergence (Current Value: {stoch.get('current_value', 50):.1f}):")
+        lines.append(f"  ├─ Regular Bullish: {stoch.get('regular_bullish', False)} (Strength: {stoch.get('regular_strength', 0):.1f})")
+        lines.append(f"  ├─ Regular Bearish: {stoch.get('regular_bearish', False)} (Strength: {stoch.get('regular_strength', 0):.1f})")
+        lines.append(f"  ├─ Hidden Bullish: {stoch.get('hidden_bullish', False)} (Strength: {stoch.get('hidden_strength', 0):.1f}) ✅ BUY DIP")
+        lines.append(f"  └─ Hidden Bearish: {stoch.get('hidden_bearish', False)} (Strength: {stoch.get('hidden_strength', 0):.1f}) ✅ SELL RALLY")
+
+        # RSI Divergence
+        rsi = divergence_data.get('rsi', {})
+        lines.append(f"\n📈 RSI Divergence (Current Value: {rsi.get('current_value', 50):.1f}):")
+        lines.append(f"  ├─ Regular Bullish: {rsi.get('regular_bullish', False)} (Strength: {rsi.get('regular_strength', 0):.1f})")
+        lines.append(f"  ├─ Regular Bearish: {rsi.get('regular_bearish', False)} (Strength: {rsi.get('regular_strength', 0):.1f})")
+        lines.append(f"  ├─ Hidden Bullish: {rsi.get('hidden_bullish', False)} (Strength: {rsi.get('hidden_strength', 0):.1f})")
+        lines.append(f"  └─ Hidden Bearish: {rsi.get('hidden_bearish', False)} (Strength: {rsi.get('hidden_strength', 0):.1f})")
+
+        # MACD Divergence
+        macd = divergence_data.get('macd', {})
+        lines.append(f"\n📉 MACD Histogram Divergence (Current Value: {macd.get('current_value', 0):.4f}):")
+        lines.append(f"  ├─ Regular Bullish: {macd.get('regular_bullish', False)} (Strength: {macd.get('regular_strength', 0):.1f})")
+        lines.append(f"  ├─ Regular Bearish: {macd.get('regular_bearish', False)} (Strength: {macd.get('regular_strength', 0):.1f})")
+        lines.append(f"  ├─ Hidden Bullish: {macd.get('hidden_bullish', False)} (Strength: {macd.get('hidden_strength', 0):.1f})")
+        lines.append(f"  └─ Hidden Bearish: {macd.get('hidden_bearish', False)} (Strength: {macd.get('hidden_strength', 0):.1f})")
+
+        # Bollinger Band Context
+        bb_trend = divergence_data.get('bb_trend', 'unknown')
+        bb_pos = divergence_data.get('bb_position_pct', 50)
+        lines.append(f"\n🎯 Bollinger Band Context:")
+        lines.append(f"  ├─ Trend Position: {bb_trend.upper()} (Price relative to BB middle)")
+        lines.append(f"  └─ Band Position: {bb_pos:.1f}% (0%=lower band, 100%=upper band)")
+
+        # Stochastic Cross Signals
+        golden = divergence_data.get('stoch_golden_cross', False)
+        death = divergence_data.get('stoch_death_cross', False)
+        oversold = divergence_data.get('stoch_near_oversold', False)
+        overbought = divergence_data.get('stoch_near_overbought', False)
+
+        lines.append(f"\n⚡ Stochastic Cross Signals:")
+        lines.append(f"  ├─ Golden Cross (K > D): {golden} {'✅ BULLISH SIGNAL' if golden else ''}")
+        lines.append(f"  ├─ Death Cross (K < D): {death} {'⚠️ BEARISH SIGNAL' if death else ''}")
+        lines.append(f"  ├─ Near Oversold (<25): {oversold} {'✅ BUY ZONE' if oversold else ''}")
+        lines.append(f"  └─ Near Overbought (>75): {overbought} {'⚠️ SELL ZONE' if overbought else ''}")
+
+        # Strategic Recommendations
+        lines.append(f"\n🔥 STRATEGIC ENTRY SIGNALS:")
+
+        # LONG Signals
+        if (bb_trend == 'above_middle' and stoch.get('hidden_bullish', False) and
+            golden and oversold):
+            lines.append("  ✅ HIGHEST PRIORITY LONG: BB Above + Hidden Bull Div + Golden Cross near 20 (Confidence: 75-85%)")
+        elif bb_trend == 'above_middle' and stoch.get('hidden_bullish', False):
+            lines.append("  ✅ HIGH PRIORITY LONG: BB Above + Hidden Bull Div (Confidence: 65-75%)")
+        elif stoch.get('hidden_bullish', False):
+            lines.append("  ⚠️ MEDIUM LONG: Hidden Bull Div alone (Confidence: 55-65%)")
+        elif stoch.get('regular_bullish', False):
+            lines.append("  ⚠️ LOW LONG: Regular Bull Div (reversal signal, needs confirmation) (Confidence: 45-55%)")
+
+        # SHORT Signals
+        if (bb_trend == 'below_middle' and stoch.get('hidden_bearish', False) and
+            death and overbought):
+            lines.append("  ✅ HIGHEST PRIORITY SHORT: BB Below + Hidden Bear Div + Death Cross near 80 (Confidence: 75-85%)")
+        elif bb_trend == 'below_middle' and stoch.get('hidden_bearish', False):
+            lines.append("  ✅ HIGH PRIORITY SHORT: BB Below + Hidden Bear Div (Confidence: 65-75%)")
+        elif stoch.get('hidden_bearish', False):
+            lines.append("  ⚠️ MEDIUM SHORT: Hidden Bear Div alone (Confidence: 55-65%)")
+        elif stoch.get('regular_bearish', False):
+            lines.append("  ⚠️ LOW SHORT: Regular Bear Div (reversal signal, needs confirmation) (Confidence: 45-55%)")
+
+        # Cross-Validation
+        confirmations = 0
+        if stoch.get('hidden_bullish', False) or stoch.get('hidden_bearish', False):
+            confirmations += 1
+        if rsi.get('hidden_bullish', False) or rsi.get('hidden_bearish', False):
+            confirmations += 1
+        if macd.get('hidden_bullish', False) or macd.get('hidden_bearish', False):
+            confirmations += 1
+
+        if confirmations >= 3:
+            lines.append(f"\n✅ TRIPLE CONFIRMATION: Stoch + RSI + MACD aligned → Add +15% confidence")
+        elif confirmations >= 2:
+            lines.append(f"\n✅ DOUBLE CONFIRMATION: 2 indicators aligned → Add +10% confidence")
+        elif confirmations >= 1:
+            lines.append(f"\n⚠️ SINGLE CONFIRMATION: 1 indicator only → Add +5% confidence")
+
+        lines.append("=" * 90)
+        return "\n".join(lines)
