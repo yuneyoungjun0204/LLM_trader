@@ -207,24 +207,24 @@ def keltner_channels_numba(high, low, close, length=20, multiplier=2.0, mamode='
 @njit(cache=True)
 def choppiness_index_numba(high, low, close, length=14):
     """Calculate Choppiness Index (CI)
-    
+
     The Choppiness Index measures market choppiness vs trending behavior.
     - Values > 61.8: Market is choppy/ranging (low directional movement)
     - Values < 38.2: Market is trending (strong directional movement)
     - Values between: Transitional state
-    
+
     Args:
         high: High prices array
         low: Low prices array
         close: Close prices array
         length: Period for calculation (default: 14)
-        
+
     Returns:
         Choppiness Index array (0-100 scale)
     """
     n = len(high)
     ci = np.full(n, np.nan)
-    
+
     for i in range(length, n):
         # Calculate True Range for the period
         true_range_sum = 0.0
@@ -236,18 +236,146 @@ def choppiness_index_numba(high, low, close, length=14):
                     abs(low[j] - close[j - 1])
                 )
                 true_range_sum += tr
-        
+
         # Calculate highest high and lowest low over the period
         period_high = np.max(high[i - length + 1:i + 1])
         period_low = np.min(low[i - length + 1:i + 1])
-        
+
         # Calculate Choppiness Index
         # CI = 100 * log10(sum(TR) / (highest_high - lowest_low)) / log10(length)
         range_hl = period_high - period_low
-        
+
         if range_hl > 0 and true_range_sum > 0:
             ci[i] = 100.0 * np.log10(true_range_sum / range_hl) / np.log10(length)
         else:
             ci[i] = 50.0  # Neutral value when range is zero
-    
+
     return ci
+
+
+@njit(cache=True)
+def bb_squeeze_detection_numba(upper_band, middle_band, lower_band, lookback=20):
+    """Detect Bollinger Bands Squeeze (low volatility periods)
+
+    Squeeze occurs when bands are extremely narrow relative to recent history.
+    This indicates low volatility and potential for explosive breakout.
+
+    Args:
+        upper_band: Bollinger upper band array
+        middle_band: Bollinger middle band array
+        lower_band: Bollinger lower band array
+        lookback: Period to compare current width against (default: 20)
+
+    Returns:
+        Tuple of (squeeze_detected, bandwidth_percentile, is_extreme_squeeze)
+        - squeeze_detected: 1 if in squeeze, 0 otherwise
+        - bandwidth_percentile: Current bandwidth vs historical (0-100)
+        - is_extreme_squeeze: 1 if bandwidth in bottom 10% (extreme squeeze)
+    """
+    n = len(upper_band)
+    squeeze_detected = np.zeros(n)
+    bandwidth_percentile = np.full(n, np.nan)
+    is_extreme_squeeze = np.zeros(n)
+
+    for i in range(lookback, n):
+        if np.isnan(upper_band[i]) or np.isnan(lower_band[i]) or np.isnan(middle_band[i]):
+            continue
+
+        # Calculate bandwidth (band width / middle band)
+        current_bandwidth = (upper_band[i] - lower_band[i]) / middle_band[i] * 100
+
+        # Get historical bandwidths for comparison
+        historical_bandwidths = []
+        for j in range(i - lookback, i):
+            if not np.isnan(upper_band[j]) and not np.isnan(lower_band[j]) and middle_band[j] > 0:
+                bw = (upper_band[j] - lower_band[j]) / middle_band[j] * 100
+                historical_bandwidths.append(bw)
+
+        if len(historical_bandwidths) > 0:
+            historical_bandwidths_arr = np.array(historical_bandwidths)
+
+            # Calculate percentile rank (lower = tighter squeeze)
+            count_below = np.sum(historical_bandwidths_arr < current_bandwidth)
+            percentile = (count_below / len(historical_bandwidths)) * 100
+            bandwidth_percentile[i] = percentile
+
+            # Squeeze detected if in bottom 30% of recent bandwidth
+            if percentile < 30:
+                squeeze_detected[i] = 1
+
+            # Extreme squeeze if in bottom 10%
+            if percentile < 10:
+                is_extreme_squeeze[i] = 1
+
+    return squeeze_detected, bandwidth_percentile, is_extreme_squeeze
+
+
+@njit(cache=True)
+def bb_breakout_detection_numba(close, upper_band, lower_band, volume, volume_ma,
+                                 squeeze_detected, lookback=5):
+    """Detect Bollinger Bands Breakout with volume confirmation
+
+    Valid breakout requires:
+    1. Price breaks above/below bands
+    2. Volume exceeds average (confirms strength)
+    3. Previous squeeze period (energy buildup)
+
+    Args:
+        close: Close prices array
+        upper_band: Bollinger upper band array
+        lower_band: Bollinger lower band array
+        volume: Volume array
+        volume_ma: Volume moving average array
+        squeeze_detected: Squeeze detection array from bb_squeeze_detection_numba
+        lookback: Periods to look back for previous squeeze (default: 5)
+
+    Returns:
+        Tuple of (breakout_signal, breakout_strength)
+        - breakout_signal: 1 (bullish breakout), -1 (bearish breakout), 0 (no breakout)
+        - breakout_strength: 0-100 score based on volume surge and band penetration
+    """
+    n = len(close)
+    breakout_signal = np.zeros(n)
+    breakout_strength = np.zeros(n)
+
+    for i in range(lookback + 1, n):
+        if np.isnan(close[i]) or np.isnan(upper_band[i]) or np.isnan(lower_band[i]):
+            continue
+
+        if np.isnan(volume[i]) or np.isnan(volume_ma[i]) or volume_ma[i] == 0:
+            continue
+
+        # Check for previous squeeze within lookback period
+        had_recent_squeeze = False
+        for j in range(max(0, i - lookback), i):
+            if squeeze_detected[j] == 1:
+                had_recent_squeeze = True
+                break
+
+        if not had_recent_squeeze:
+            continue
+
+        # Calculate volume surge (current volume vs MA)
+        volume_surge = (volume[i] / volume_ma[i] - 1) * 100
+
+        # Volume must be above average for valid breakout
+        if volume_surge < 0:
+            continue
+
+        # Check for bullish breakout (close above upper band)
+        if close[i] > upper_band[i]:
+            band_penetration = (close[i] - upper_band[i]) / upper_band[i] * 100
+            strength = min(100, (volume_surge * 0.6 + band_penetration * 100 * 0.4))
+
+            breakout_signal[i] = 1
+            breakout_strength[i] = strength
+
+        # Check for bearish breakout (close below lower band)
+        elif close[i] < lower_band[i]:
+            band_penetration = (lower_band[i] - close[i]) / lower_band[i] * 100
+            strength = min(100, (volume_surge * 0.6 + band_penetration * 100 * 0.4))
+
+            breakout_signal[i] = -1
+            breakout_strength[i] = strength
+
+    return breakout_signal, breakout_strength

@@ -58,6 +58,17 @@ class IndicatorBase:
             elif 'macd' in func_name:
                 # macd: (macd_line, signal_line, histogram) 튜플 반환
                 return (np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan))
+            elif 'bollinger' in func_name or 'bands' in func_name:
+                # bollinger_bands: (upper_band, middle_band, lower_band) 튜플 반환
+                return (np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan))
+            elif 'keltner' in func_name or 'chandelier' in func_name or 'donchian' in func_name:
+                # keltner_channels: (upper, middle, lower) 튜플 반환
+                # chandelier_exit: (long_exit, short_exit) 튜플 반환
+                # donchian_channels: (upper, middle, lower) 튜플 반환
+                if 'chandelier' in func_name:
+                    return (np.full(n, np.nan), np.full(n, np.nan))
+                else:
+                    return (np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan))
             else:
                 # 단일 배열 반환 (대부분의 인디케이터)
                 return np.full(n, np.nan)

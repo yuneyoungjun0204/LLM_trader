@@ -663,9 +663,53 @@ class VolatilityIndicators(IndicatorCategory['VolatilityIndicators']):
             required_length=length
         )
 
+    def bb_squeeze_detection(self, upper_band: np.ndarray, middle_band: np.ndarray,
+                            lower_band: np.ndarray, lookback: int = 20) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Detect Bollinger Bands Squeeze
+
+        Identifies low volatility periods (squeeze) that often precede breakouts.
+
+        Args:
+            upper_band: Bollinger upper band array
+            middle_band: Bollinger middle band array
+            lower_band: Bollinger lower band array
+            lookback: Period to compare current width against (default: 20)
+
+        Returns:
+            Tuple of (squeeze_detected, bandwidth_percentile, is_extreme_squeeze)
+        """
+        from src.indicators.volatility.volatility_indicators import bb_squeeze_detection_numba
+        return bb_squeeze_detection_numba(upper_band, middle_band, lower_band, lookback)
+
+    def bb_breakout_detection(self, close: np.ndarray, upper_band: np.ndarray,
+                             lower_band: np.ndarray, volume: np.ndarray,
+                             volume_ma: np.ndarray, squeeze_detected: np.ndarray,
+                             lookback: int = 5) -> Tuple[np.ndarray, np.ndarray]:
+        """Detect Bollinger Bands Breakout
+
+        Identifies valid breakouts from squeeze periods with volume confirmation.
+
+        Args:
+            close: Close prices array
+            upper_band: Bollinger upper band array
+            lower_band: Bollinger lower band array
+            volume: Volume array
+            volume_ma: Volume moving average array
+            squeeze_detected: Squeeze detection array
+            lookback: Periods to look back for previous squeeze (default: 5)
+
+        Returns:
+            Tuple of (breakout_signal, breakout_strength)
+            - breakout_signal: 1 (bullish), -1 (bearish), 0 (none)
+            - breakout_strength: 0-100 score
+        """
+        from src.indicators.volatility.volatility_indicators import bb_breakout_detection_numba
+        return bb_breakout_detection_numba(close, upper_band, lower_band,
+                                          volume, volume_ma, squeeze_detected, lookback)
+
     def choppiness_index(self, length: int = 14) -> np.ndarray:
         """Calculate Choppiness Index
-        
+
         Measures market choppiness vs trending behavior.
         Values > 61.8 indicate choppy/ranging market.
         Values < 38.2 indicate trending market.
