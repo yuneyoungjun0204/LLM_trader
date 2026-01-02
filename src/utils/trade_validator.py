@@ -54,8 +54,9 @@ class TradeValidator:
                 return False, f"Invalid risk/reward calculation (risk: {risk}, reward: {reward})", None
             
             rr_ratio = reward / risk if risk > 0 else 0
-            if rr_ratio < 1.0:
-                return False, f"R/R ratio ({rr_ratio:.2f}) < 1.0 (minimum required)", None
+            # R/R ratio 체크 완화: 0.5 이상이면 경고만 (TP/SL 자동 수정 로직에서 처리)
+            if rr_ratio < 0.5:
+                return False, f"R/R ratio ({rr_ratio:.2f}) < 0.5 (too low, minimum 0.5 required)", None
         
         # Validate SHORT (SELL) trades
         elif decision == 'SELL' or direction == 'SHORT':
@@ -71,8 +72,9 @@ class TradeValidator:
                 return False, f"Invalid risk/reward calculation (risk: {risk}, reward: {reward})", None
             
             rr_ratio = reward / risk if risk > 0 else 0
-            if rr_ratio < 1.0:
-                return False, f"R/R ratio ({rr_ratio:.2f}) < 1.0 (minimum required)", None
+            # R/R ratio 체크 완화: 0.5 이상이면 경고만 (TP/SL 자동 수정 로직에서 처리)
+            if rr_ratio < 0.5:
+                return False, f"R/R ratio ({rr_ratio:.2f}) < 0.5 (too low, minimum 0.5 required)", None
         
         return True, None, result
     
@@ -82,7 +84,7 @@ class TradeValidator:
         current_price: float,
         default_rr_ratio: float = 1.5
     ) -> Dict[str, Any]:
-        """Attempt to auto-correct swapped TP/SL values.
+        """Attempt to auto-correct swapped TP/SL values and improve R/R ratio.
         
         Args:
             result: AI analysis result dictionary
@@ -116,6 +118,16 @@ class TradeValidator:
             elif stop_loss < entry_price and take_profit <= entry_price:
                 reward = (entry_price - stop_loss) * default_rr_ratio
                 corrected['take_profit'] = entry_price + reward
+            # 🔥 NEW: If R/R ratio is too low (< 1.0), improve TP to achieve minimum 1.2:1
+            elif stop_loss < entry_price and take_profit > entry_price:
+                risk = entry_price - stop_loss
+                reward = take_profit - entry_price
+                rr_ratio = reward / risk if risk > 0 else 0
+                
+                if rr_ratio < 1.2:  # If R/R < 1.2:1, improve it
+                    # Improve TP to achieve at least 1.2:1 R/R
+                    min_reward = risk * 1.2
+                    corrected['take_profit'] = entry_price + min_reward
         
         # Try to correct SHORT trades
         elif decision == 'SELL' or direction == 'SHORT':
@@ -131,6 +143,16 @@ class TradeValidator:
             elif stop_loss > entry_price and take_profit >= entry_price:
                 reward = (stop_loss - entry_price) * default_rr_ratio
                 corrected['take_profit'] = entry_price - reward
+            # 🔥 NEW: If R/R ratio is too low (< 1.0), improve TP to achieve minimum 1.2:1
+            elif stop_loss > entry_price and take_profit < entry_price:
+                risk = stop_loss - entry_price
+                reward = entry_price - take_profit
+                rr_ratio = reward / risk if risk > 0 else 0
+                
+                if rr_ratio < 1.2:  # If R/R < 1.2:1, improve it
+                    # Improve TP to achieve at least 1.2:1 R/R
+                    min_reward = risk * 1.2
+                    corrected['take_profit'] = entry_price - min_reward
         
         return corrected
     

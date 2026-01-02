@@ -21,15 +21,17 @@ class TemplateManager:
     - Timeframe roles: 5m/15m = Trigger (entry/exit), 30m/1h/2h = Filter (trend/restriction)
     """
     
-    # 🔥 CENTRAL TIMEFRAME CONFIGURATION - Modify here to update all prompts
-    # Day Trading Optimized: 6h, 12h 제거 (데이트레이딩에 너무 장기적)
-    TIMEFRAMES: List[str] = ["3m", "5m", "15m", "30m", "1h", "2h"]
-    TRIGGER_TIMEFRAMES: List[str] = ["3m", "5m"]  # Entry/exit timing
-    FILTER_TIMEFRAMES: List[str] = ["15m", "30m"]  # Trend/restriction
-    HARD_WALL_TIMEFRAMES: List[str] = ["1h", "2h"]  # Primary S/R boundaries
-    MACRO_TIMEFRAME: str = "5m"  # Macro context definition
-    MACRO_CONTEXT_DAYS: float = 1
-      # Approximate days for macro timeframe (100 candles * 4h / 24h)
+    # 🔥 CENTRAL TIMEFRAME CONFIGURATION - Simplified to [5m, 15m, 1h]
+    # Simplified Day Trading Strategy:
+    # - 1h (Wall): EMA 20 기울기로 롱/숏 장 판단
+    # - 15m (Filter): RSI 과매도(30 이하) 탈출 또는 EMA 20 위 안착 시 '준비' 신호
+    # - 5m (Trigger): 스토캐스틱 골든크로스 발생 시 즉시 진입, 전저점 기준 손절가
+    TIMEFRAMES: List[str] = ["5m", "15m", "1h"]
+    TRIGGER_TIMEFRAMES: List[str] = ["5m"]  # Entry/exit timing (Stochastic Golden Cross)
+    FILTER_TIMEFRAMES: List[str] = ["15m"]  # Trend/restriction (RSI oversold exit, EMA 20 above)
+    HARD_WALL_TIMEFRAMES: List[str] = ["1h"]  # Primary S/R boundaries (EMA 20 slope for long/short market)
+    MACRO_TIMEFRAME: str = "1h"  # Macro context definition (EMA 20 slope)
+    MACRO_CONTEXT_DAYS: float = 4.17  # Approximate days for macro timeframe (100 candles * 1h / 24h)
     
     def __init__(self, config: Any, logger: Optional[Logger] = None):
         """Initialize the template manager.
@@ -96,10 +98,9 @@ class TemplateManager:
             "- **Referee:** Finalizes the decision based on Confluence Scoring and R/R Ratio.",
             "",
             "## 3. Support/Resistance \"Wall\" Rules",
-            f"- **Hard Walls:** {hard_wall_str} High/Low are primary boundaries.",
-            "- **Wall Proximity:** If price is within 0.5% of a Hard Wall:",
-            "    - Default: Cap confidence at 60% (Avoid entry).",
-            f"    - Exception: If Trigger ({trigger_str}) Volume > 2x average AND clear Marubozu candle, treat as \"High-Probability Breakout\" and allow 70%+ confidence.",
+            f"- **Hard Walls:** {hard_wall_str} EMA 20 기울기로 롱/숏 장 판단 (기울기 양수 = 롱 장, 기울기 음수 = 숏 장).",
+            f"- **Filter:** {filter_str} RSI 과매도(30 이하) 탈출 또는 EMA 20 위 안착 시 '준비' 신호.",
+            f"- **Trigger:** {trigger_str} 스토캐스틱 골든크로스 발생 시 즉시 진입, 전저점 기준 손절가.",
             "",
             "## 4. Confidence Calculation Formula (Deterministic)",
             "You must calculate confidence using this weighted formula:",

@@ -1,4 +1,6 @@
 import numpy as np
+# 🔥 NumPy array 출력 숨기기 (로그 가독성 향상)
+np.set_printoptions(threshold=0, edgeitems=0)  # 배열 전체 출력 비활성화
 from typing import Optional, Any
 
 from src.logger.logger import Logger
