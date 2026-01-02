@@ -27,7 +27,7 @@ class TemplateManager:
     TRIGGER_TIMEFRAMES: List[str] = ["3m", "5m"]  # Entry/exit timing
     FILTER_TIMEFRAMES: List[str] = ["15m", "30m"]  # Trend/restriction
     HARD_WALL_TIMEFRAMES: List[str] = ["1h", "2h"]  # Primary S/R boundaries
-    MACRO_TIMEFRAME: str = "15m"  # Macro context definition
+    MACRO_TIMEFRAME: str = "5m"  # Macro context definition
     MACRO_CONTEXT_DAYS: float = 1
       # Approximate days for macro timeframe (100 candles * 4h / 24h)
     
