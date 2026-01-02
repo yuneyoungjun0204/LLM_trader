@@ -255,13 +255,15 @@ class AnalysisResultProcessor:
             parsed_response["confidence"] = final_confidence
             parsed_response["reasoning"] = final_reasoning
 
-            # Also promote TP/SL/Entry if available
+            # Also promote TP/SL/Entry/Direction if available
             if "take_profit" in analysis:
                 parsed_response["take_profit"] = analysis["take_profit"]
             if "stop_loss" in analysis:
                 parsed_response["stop_loss"] = analysis["stop_loss"]
             if "entry_price" in analysis:
                 parsed_response["entry_price"] = analysis["entry_price"]
+            if "direction" in analysis:
+                parsed_response["direction"] = analysis["direction"]
 
             self.logger.debug(
                 f"📤 Top-level fields promoted: decision={final_signal}, "
