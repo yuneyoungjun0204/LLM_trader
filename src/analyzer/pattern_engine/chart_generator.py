@@ -127,37 +127,13 @@ class ChartGenerator:
 
         def export_worker():
             try:
-                # Manually initialize kaleido scope for plotly
-                try:
-                    from kaleido.scopes.plotly import PlotlyScope
-
-                    # Create kaleido scope manually
-                    scope = PlotlyScope()
-
-                    # Convert figure to dict and export
-                    fig_dict = fig.to_dict()
-                    img_bytes_result = scope.transform(
-                        fig_dict,
-                        format=format,
-                        width=width,
-                        height=height,
-                        scale=scale
-                    )
-
-                    result['img_bytes'] = img_bytes_result
-
-                except Exception as scope_error:
-                    # If manual scope creation fails, try standard method
-                    if self.logger:
-                        self.logger.debug(f"Manual kaleido scope failed: {scope_error}, trying standard method")
-
-                    result['img_bytes'] = fig.to_image(
-                        format=format,
-                        width=width,
-                        height=height,
-                        scale=scale,
-                        engine="kaleido"
-                    )
+                # Use plotly's standard to_image (compatible with kaleido 1.2.0)
+                result['img_bytes'] = fig.to_image(
+                    format=format,
+                    width=width,
+                    height=height,
+                    scale=scale
+                )
             except Exception as e:
                 result['exception'] = e
 
