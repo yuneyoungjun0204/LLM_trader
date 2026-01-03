@@ -19,10 +19,10 @@ from src.utils.profiler import profile_performance
 
 class ChartGenerator:
     """Generates interactive charts and static images for market data with OHLCV and RSI."""
-    
+
     def __init__(self, logger: Optional[Logger] = None, config: Optional[Any] = None, formatter: Optional[Callable] = None, format_utils=None):
         """Initialize the chart generator.
-        
+
         Args:
             logger: Optional logger instance for debugging
             config: Optional config instance to avoid circular imports
@@ -35,6 +35,9 @@ class ChartGenerator:
         self.logger = logger
         self.config = config
         self.formatter = formatter or self._default_formatter
+
+        # Ensure kaleido path is set (redundant safety check)
+        self._configure_kaleido()
         
         # AI-optimized colors for better pattern recognition
         self.ai_colors = {
@@ -48,7 +51,47 @@ class ChartGenerator:
         }
         # AI chart candle limit from config
         self.ai_candle_limit = config.AI_CHART_CANDLE_LIMIT if config is not None else 200
-        
+
+    def _configure_kaleido(self):
+        """Configure kaleido executable path explicitly to avoid import issues."""
+        try:
+            import os
+            import kaleido as runtime_kaleido
+
+            # Get kaleido package location
+            kaleido_path = os.path.dirname(runtime_kaleido.__file__)
+
+            # Try multiple possible executable locations (updated for kaleido 0.2.1+)
+            possible_paths = [
+                os.path.join(kaleido_path, 'executable', 'bin', 'kaleido.exe'),  # Windows (0.2.1+)
+                os.path.join(kaleido_path, 'executable', 'bin', 'kaleido'),      # Unix (0.2.1+)
+                os.path.join(kaleido_path, 'executable', 'kaleido.exe'),         # Windows (old)
+                os.path.join(kaleido_path, 'executable', 'kaleido'),             # Unix (old)
+                os.path.join(kaleido_path, 'kaleido.exe'),                       # Alternative Windows
+                os.path.join(kaleido_path, 'kaleido'),                           # Alternative Unix
+            ]
+
+            for path in possible_paths:
+                if os.path.exists(path):
+                    os.environ['KALEIDO_EXECUTABLE_PATH'] = path
+                    if self.logger:
+                        self.logger.info(f"✓ Kaleido executable configured: {path}")
+                    return  # Success
+
+            # If we get here, no executable was found
+            if self.logger:
+                self.logger.warning(
+                    f"⚠ Kaleido executable not found. Searched:\n" +
+                    "\n".join(f"  - {p}" for p in possible_paths) +
+                    f"\nKaleido package: {kaleido_path}"
+                )
+        except ImportError:
+            if self.logger:
+                self.logger.warning("⚠ Kaleido package not installed - chart generation will be disabled")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"⚠ Failed to configure kaleido: {e}")
+
     def _default_formatter(self, val, precision=8):
         """Default formatter for price values when no formatter is provided."""
         if isinstance(val, (int, float)) and not np.isnan(val):
@@ -64,7 +107,7 @@ class ChartGenerator:
     
     def _image_export_with_timeout(self, fig: go.Figure, format: str, width: int, height: int, scale: int, timeout: int = 30) -> bytes:
         """Execute image export with a timeout to prevent indefinite hangs.
-        
+
         Args:
             fig: Plotly figure to export
             format: Image format (e.g., "png")
@@ -72,32 +115,62 @@ class ChartGenerator:
             height: Image height
             scale: Image scale factor
             timeout: Timeout in seconds (default: 30)
-            
+
         Returns:
             Image bytes
-            
+
         Raises:
             TimeoutError: If export takes longer than timeout
             Exception: If export fails for other reasons
         """
         result = {'img_bytes': None, 'exception': None}
-        
+
         def export_worker():
             try:
-                result['img_bytes'] = fig.to_image(format=format, width=width, height=height, scale=scale)
+                # Manually initialize kaleido scope for plotly
+                try:
+                    from kaleido.scopes.plotly import PlotlyScope
+
+                    # Create kaleido scope manually
+                    scope = PlotlyScope()
+
+                    # Convert figure to dict and export
+                    fig_dict = fig.to_dict()
+                    img_bytes_result = scope.transform(
+                        fig_dict,
+                        format=format,
+                        width=width,
+                        height=height,
+                        scale=scale
+                    )
+
+                    result['img_bytes'] = img_bytes_result
+
+                except Exception as scope_error:
+                    # If manual scope creation fails, try standard method
+                    if self.logger:
+                        self.logger.debug(f"Manual kaleido scope failed: {scope_error}, trying standard method")
+
+                    result['img_bytes'] = fig.to_image(
+                        format=format,
+                        width=width,
+                        height=height,
+                        scale=scale,
+                        engine="kaleido"
+                    )
             except Exception as e:
                 result['exception'] = e
-        
+
         thread = threading.Thread(target=export_worker, daemon=True)
         thread.start()
         thread.join(timeout=timeout)
-        
+
         if thread.is_alive():
             raise TimeoutError(f"Image export timed out after {timeout} seconds (kaleido may be hanging)")
-        
+
         if result['exception']:
             raise result['exception']
-        
+
         return result['img_bytes']
     
     def _retry_image_export(self, fig: go.Figure, format: str, width: int, height: int, scale: int, max_retries: int = 3, timeout: int = 30) -> bytes:
@@ -232,7 +305,9 @@ class ChartGenerator:
                 
         except Exception as e:
             if self.logger:
+                import traceback
                 self.logger.error(f"Error generating chart image: {str(e)}")
+                self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise
     
     def _create_simple_candlestick_chart(

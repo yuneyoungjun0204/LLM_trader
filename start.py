@@ -4,6 +4,7 @@ Automated trading with AI-powered decisions.
 """
 import asyncio
 import sys
+import os
 import argparse
 from src.config.loader import config
 from src.app import CryptoTradingBot
@@ -12,6 +13,27 @@ import warnings
 
 # Suppress SyntaxWarning from docopt libraries
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="docopt")
+
+# Configure kaleido path explicitly for plotly image export
+try:
+    import kaleido
+    # Get the kaleido package path
+    kaleido_path = os.path.dirname(kaleido.__file__)
+
+    # Try multiple possible executable locations (kaleido 0.2.1+ uses executable/bin/)
+    possible_paths = [
+        os.path.join(kaleido_path, 'executable', 'bin', 'kaleido.exe'),  # Windows (0.2.1+)
+        os.path.join(kaleido_path, 'executable', 'bin', 'kaleido'),      # Unix (0.2.1+)
+        os.path.join(kaleido_path, 'executable', 'kaleido.exe'),         # Windows (old)
+        os.path.join(kaleido_path, 'executable', 'kaleido'),             # Unix (old)
+    ]
+
+    for kaleido_bin in possible_paths:
+        if os.path.exists(kaleido_bin):
+            os.environ['KALEIDO_EXECUTABLE_PATH'] = kaleido_bin
+            break
+except ImportError:
+    pass  # kaleido not installed, will be handled by chart_generator
 
 from src.utils.graceful_shutdown_manager import GracefulShutdownManager
 
