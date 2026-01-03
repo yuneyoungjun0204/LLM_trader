@@ -363,19 +363,19 @@ You may include your reasoning INSIDE the JSON in the "reasoning" field, but the
 {{
   "analysis": {{
     "reasoning": "[1. Multi-timeframe status | 2. S/R wall proximity | 3. Volume/Momentum confirmation | 4. Risk/Reward validation]",
-    "signal": "BUY|SELL|HOLD|CLOSE|UPDATE",
+        "signal": "BUY|SELL|HOLD|CLOSE|UPDATE",
     "direction": "LONG|SHORT|NEUTRAL",
-    "confidence": 0-100,
+        "confidence": 0-100,
     "confluence_factors": {{
-      "trend_alignment": 0-100,
-      "momentum_strength": 0-100,
-      "volume_support": 0-100,
-      "pattern_quality": 0-100,
-      "support_resistance_strength": 0-100
+            "trend_alignment": 0-100,
+            "momentum_strength": 0-100,
+            "volume_support": 0-100,
+            "pattern_quality": 0-100,
+            "support_resistance_strength": 0-100
     }},
-    "entry_price": number,
-    "stop_loss": number,
-    "take_profit": number,
+        "entry_price": number,
+        "stop_loss": number,
+        "take_profit": number,
     "risk_reward_ratio": number,
     "position_size": 0.1-1.0
   }}

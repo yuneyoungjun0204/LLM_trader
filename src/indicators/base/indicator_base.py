@@ -69,6 +69,24 @@ class IndicatorBase:
                     return (np.full(n, np.nan), np.full(n, np.nan))
                 else:
                     return (np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan))
+            elif 'vortex' in func_name:
+                # vortex_indicator: (vi_plus, vi_minus) 튜플 반환
+                return (np.full(n, np.nan), np.full(n, np.nan))
+            elif 'adx' in func_name:
+                # adx: (adx, plus_di, minus_di) 튜플 반환
+                return (np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan))
+            elif 'ichimoku' in func_name:
+                # ichimoku_cloud: (conversion, base, span_a, span_b) 튜플 반환
+                return (np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan))
+            elif 'supertrend' in func_name:
+                # supertrend: (supertrend, direction) 튜플 반환
+                return (np.full(n, np.nan), np.full(n, np.nan))
+            elif 'pivot' in func_name:
+                # pivot_points: 9-tuple, fibonacci_pivot_points: 7-tuple
+                if 'fibonacci' in func_name:
+                    return tuple(np.full(n, np.nan) for _ in range(7))
+                else:
+                    return tuple(np.full(n, np.nan) for _ in range(9))
             else:
                 # 단일 배열 반환 (대부분의 인디케이터)
                 return np.full(n, np.nan)

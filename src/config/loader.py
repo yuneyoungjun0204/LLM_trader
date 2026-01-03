@@ -274,7 +274,40 @@ class Config:
     
     @property
     def OPENROUTER_FALLBACK_MODEL(self):
-        return self.get_config('ai_providers', 'openrouter_fallback_model', 'deepseek/deepseek-r1:free')
+        """Legacy property for backward compatibility (returns fallback_model_1)"""
+        return self.OPENROUTER_FALLBACK_MODELS[0] if self.OPENROUTER_FALLBACK_MODELS else 'deepseek/deepseek-r1:free'
+    
+    @property
+    def OPENROUTER_FALLBACK_MODELS(self):
+        """Get list of fallback models in priority order (fallback_model_1, fallback_model_2, fallback_model_3)"""
+        models = []
+        
+        # Try legacy name first for backward compatibility
+        fallback_1 = self.get_config('ai_providers', 'openrouter_fallback_model', None)
+        if fallback_1:
+            models.append(fallback_1.strip())
+        
+        # Add new fallback models
+        fallback_1_new = self.get_config('ai_providers', 'openrouter_fallback_model_1', None)
+        if fallback_1_new and fallback_1_new.strip():
+            if not models:  # Only add if legacy not found
+                models.append(fallback_1_new.strip())
+            elif models[0] != fallback_1_new.strip():  # Avoid duplicates
+                models[0] = fallback_1_new.strip()  # Replace with new config value
+        
+        fallback_2 = self.get_config('ai_providers', 'openrouter_fallback_model_2', None)
+        if fallback_2 and fallback_2.strip():
+            models.append(fallback_2.strip())
+        
+        fallback_3 = self.get_config('ai_providers', 'openrouter_fallback_model_3', None)
+        if fallback_3 and fallback_3.strip():
+            models.append(fallback_3.strip())
+        
+        # Default fallback if none configured
+        if not models:
+            models.append('deepseek/deepseek-r1:free')
+        
+        return models
     
     @property
     def GOOGLE_STUDIO_MODEL(self):

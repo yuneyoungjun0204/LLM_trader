@@ -141,10 +141,25 @@ class TechnicalCalculator:
 
     def _calculate_trend_indicators(self) -> Dict[str, np.ndarray]:
         """Calculate trend indicators"""
+        # 🔥 SAFE: Handle ADX calculation with insufficient data
+        try:
+            adx_result = self.ti.trend.adx(length=14)
+            adx_val = adx_result[0]
+            plus_di_val = adx_result[1]
+            minus_di_val = adx_result[2]
+        except (IndexError, Exception) as e:
+            import numpy as np
+            n = len(self.ti._base.close)
+            adx_val = np.full(n, np.nan)
+            plus_di_val = np.full(n, np.nan)
+            minus_di_val = np.full(n, np.nan)
+            if self.logger:
+                self.logger.warning(f"Failed to calculate ADX: {e}, returning NaN arrays")
+
         indicators = {
-            "adx": self.ti.trend.adx(length=14)[0],
-            "plus_di": self.ti.trend.adx(length=14)[1],
-            "minus_di": self.ti.trend.adx(length=14)[2],
+            "adx": adx_val,
+            "plus_di": plus_di_val,
+            "minus_di": minus_di_val,
             "trix": self.ti.trend.trix(length=20),
             "pfe": self.ti.trend.pfe(n=20, m=5),
             "td_sequential": self.ti.trend.td_sequential(length=9),
@@ -625,15 +640,19 @@ class TechnicalCalculator:
         atr_vals = ti.volatility.atr(length=14)
         if atr_vals is not None and not np.isnan(atr_vals[-1]):
             out['daily_atr'] = float(atr_vals[-1])
-        
-        # ADX and DI
-        adx_vals, plus_di_vals, minus_di_vals = ti.trend.adx(length=14)
-        if adx_vals is not None and not np.isnan(adx_vals[-1]):
-            out['daily_adx'] = float(adx_vals[-1])
-        if plus_di_vals is not None and not np.isnan(plus_di_vals[-1]):
-            out['daily_plus_di'] = float(plus_di_vals[-1])
-        if minus_di_vals is not None and not np.isnan(minus_di_vals[-1]):
-            out['daily_minus_di'] = float(minus_di_vals[-1])
+
+        # ADX and DI - safe handling for insufficient data
+        try:
+            adx_vals, plus_di_vals, minus_di_vals = ti.trend.adx(length=14)
+            if adx_vals is not None and not np.isnan(adx_vals[-1]):
+                out['daily_adx'] = float(adx_vals[-1])
+            if plus_di_vals is not None and not np.isnan(plus_di_vals[-1]):
+                out['daily_plus_di'] = float(plus_di_vals[-1])
+            if minus_di_vals is not None and not np.isnan(minus_di_vals[-1]):
+                out['daily_minus_di'] = float(minus_di_vals[-1])
+        except (IndexError, Exception) as e:
+            if self.logger:
+                self.logger.warning(f"Failed to calculate daily ADX: {e}")
         
         # OBV
         obv_vals = ti.vol.obv()

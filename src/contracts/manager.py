@@ -424,13 +424,109 @@ class ModelManager(ModelManagerProtocol):
             except Exception as e:
                 return cast(ResponseDict, {"error": f"Ollama connection failed: {str(e)}. Is Ollama running on {self.config.OLLAMA_BASE_URL}?"})
 
-        # OpenRouter standard flow
+        # OpenRouter standard flow with multi-tier fallback model support
         if provider == "openrouter":
-            if chart:
-                return await client.chat_completion_with_chart_analysis(
-                    effective_model, messages, cast(Any, chart_image), config
+            # Determine if using base model or custom override
+            is_base_model = effective_model == self.config.OPENROUTER_BASE_MODEL
+            model_type = "base_model" if is_base_model else "custom_model"
+            
+            # Get fallback models list
+            fallback_models = getattr(self.config, 'OPENROUTER_FALLBACK_MODELS', [])
+            if not fallback_models and hasattr(self.config, 'OPENROUTER_FALLBACK_MODEL'):
+                # Backward compatibility: single fallback model
+                fallback_models = [self.config.OPENROUTER_FALLBACK_MODEL]
+            
+            # Log which model is being used
+            fallback_list_str = ", ".join(fallback_models) if fallback_models else "none"
+            self.logger.info(
+                f"OpenRouter: Using {model_type} '{effective_model}' "
+                f"(Base: {self.config.OPENROUTER_BASE_MODEL}, "
+                f"Fallbacks: [{fallback_list_str}])"
+            )
+            
+            # Build list of models to try: [base/custom, fallback_1, fallback_2, fallback_3]
+            models_to_try = [effective_model]
+            if is_base_model:  # Only add fallbacks if using base model (not custom override)
+                models_to_try.extend(fallback_models)
+            
+            # Try each model in sequence
+            last_error = None
+            for idx, model_to_try in enumerate(models_to_try):
+                try:
+                    if chart:
+                        response = await client.chat_completion_with_chart_analysis(
+                            model_to_try, messages, cast(Any, chart_image), config
+                        )
+                    else:
+                        response = await client.chat_completion(model_to_try, messages, config)
+                    
+                    # Check if response is valid
+                    if self._is_valid_response(response):
+                        if idx > 0:  # Success with fallback model
+                            priority = idx  # 1-based priority (1, 2, 3)
+                            self.logger.info(
+                                f"✅ OpenRouter: Successfully used fallback_model_{priority} '{model_to_try}' "
+                                f"after previous model failure (tried {idx} models)"
+                            )
+                        return response
+                    else:
+                        # Invalid response, try next model
+                        error_msg = response.get("error", "Invalid response") if isinstance(response, dict) else "Invalid response"
+                        self.logger.warning(
+                            f"⚠️ OpenRouter model '{model_to_try}' (priority {idx+1}/{len(models_to_try)}) failed: {error_msg}"
+                        )
+                        last_error = error_msg
+                        
+                except Exception as e:
+                    # Exception occurred, try next model
+                    self.logger.warning(
+                        f"⚠️ OpenRouter model '{model_to_try}' (priority {idx+1}/{len(models_to_try)}) exception: {str(e)}"
+                    )
+                    last_error = str(e)
+                    continue
+            
+            # All OpenRouter models failed - try Google AI Studio direct API as final fallback
+            if self.google_client:
+                self.logger.warning(
+                    f"⚠️ OpenRouter: All models failed (tried {len(models_to_try)} models). "
+                    f"Falling back to Google AI Studio direct API..."
                 )
-            return await client.chat_completion(effective_model, messages, config)
+                try:
+                    # Use Google AI Studio directly with Google's native API
+                    # Get Google AI config (use instance variable initialized in __init__)
+                    google_config = self.google_config
+                    
+                    if chart:
+                        google_response = await self.google_client.chat_completion_with_chart_analysis(
+                            messages, cast(Any, chart_image), google_config, model=self.config.GOOGLE_STUDIO_MODEL
+                        )
+                    else:
+                        google_response = await self.google_client.chat_completion(
+                            messages, google_config, model=self.config.GOOGLE_STUDIO_MODEL
+                        )
+                    
+                    if self._is_valid_response(google_response):
+                        self.logger.info(
+                            f"✅ Google AI Studio direct API: Successfully used '{self.config.GOOGLE_STUDIO_MODEL}' "
+                            f"as fallback after all OpenRouter models failed"
+                        )
+                        return google_response
+                    else:
+                        self.logger.warning(
+                            f"⚠️ Google AI Studio direct API: Invalid response, continuing to error..."
+                        )
+                except Exception as e:
+                    self.logger.warning(
+                        f"⚠️ Google AI Studio direct API: Exception occurred: {str(e)}"
+                    )
+            
+            # All models failed including Google AI Studio - return error
+            error_detail = last_error if last_error else "All fallback models exhausted"
+            self.logger.error(
+                f"❌ OpenRouter: All models failed (tried {len(models_to_try)} OpenRouter models + Google AI Studio). "
+                f"Last error: {error_detail}"
+            )
+            return cast(ResponseDict, {"error": f"All OpenRouter models and Google AI Studio failed: {error_detail}"})
 
         return cast(ResponseDict, {"error": f"Provider '{provider}' is not available"})
     
@@ -438,7 +534,7 @@ class ModelManager(ModelManagerProtocol):
                                       effective_model: str, chart: bool, 
                                       chart_image: Optional[Union[io.BytesIO, bytes, str]]) -> Dict[str, Any]:
         """
-        Invoke Google AI provider with free/paid tier fallback logic.
+        Invoke Google AI provider with free/paid tier fallback logic, then OpenRouter fallback.
         
         Args:
             client: Google AI client instance
@@ -449,39 +545,121 @@ class ModelManager(ModelManagerProtocol):
             chart_image: Optional chart image data
             
         Returns:
-            Response dictionary from Google AI
+            Response dictionary from Google AI or OpenRouter (if Google AI fails)
         """
         # Determine if model supports free tier (only Flash variants)
         is_free_tier_model = "flash" in effective_model.lower()
         tier_info = "free tier" if is_free_tier_model else "paid tier"
         self.logger.info(f"Attempting with Google AI {tier_info} API (model: {effective_model})")
         
+        # Try free tier first
         if chart:
             response = await client.chat_completion_with_chart_analysis(messages, cast(Any, chart_image), config, model=effective_model)
         else:
             response = await client.chat_completion(messages, config, model=effective_model)
         
-        # If free tier is overloaded/rate-limited and paid client is available, retry with paid API
+        # Check if free tier succeeded
+        if self._is_valid_response(response):
+            tier_success = "free tier" if is_free_tier_model else "paid tier"
+            self.logger.info(f"✅ Successfully used {tier_success} Google AI API")
+            return response
+        
+        # Free tier failed - log the error
         error_type = response.get("error") if response else None
+        free_error = response.get("error", "Unknown error") if response else "No response"
+        self.logger.warning(f"⚠️ Google AI free tier failed: {free_error}")
+        
+        # If free tier is overloaded/rate-limited and paid client is available, retry with paid API
         if error_type in ("overloaded", "rate_limit") and self.google_paid_client:
             error_reason = "rate limited" if error_type == "rate_limit" else "overloaded"
-            self.logger.warning(f"Google AI free tier {error_reason}, retrying with paid API key")
+            self.logger.warning(f"⚠️ Google AI free tier {error_reason}, retrying with paid API key")
             if chart:
                 response = await self.google_paid_client.chat_completion_with_chart_analysis(messages, cast(Any, chart_image), config, model=effective_model)
             else:
                 response = await self.google_paid_client.chat_completion(messages, config, model=effective_model)
             
             if self._is_valid_response(response):
-                self.logger.info(f"Successfully used paid Google AI API after free tier {error_reason}")
+                self.logger.info(f"✅ Successfully used paid Google AI API after free tier {error_reason}")
+                return response
             else:
                 # Paid API also failed - log the specific error
                 paid_error = response.get("error", "unknown") if response else "no response"
-                self.logger.error(f"Paid Google AI API also failed: {paid_error}. Both free and paid tiers unavailable.")
-        elif self._is_valid_response(response):
-            tier_success = "free tier" if is_free_tier_model else "paid tier"
-            self.logger.info(f"Successfully used {tier_success} Google AI API")
+                self.logger.error(f"❌ Paid Google AI API also failed: {paid_error}. Both free and paid tiers unavailable.")
         
-        return response
+        # Google AI Studio failed - fallback to OpenRouter
+        if self.openrouter_client:
+            self.logger.warning(
+                f"⚠️ Google AI Studio: All attempts failed (free + paid tiers). "
+                f"Falling back to OpenRouter with multi-tier fallback models..."
+            )
+            
+            # Get OpenRouter config and models (use instance variables initialized in __init__)
+            openrouter_config = self.openrouter_config
+            base_model = self.config.OPENROUTER_BASE_MODEL
+            
+            # Get fallback models list
+            fallback_models = getattr(self.config, 'OPENROUTER_FALLBACK_MODELS', [])
+            if not fallback_models and hasattr(self.config, 'OPENROUTER_FALLBACK_MODEL'):
+                fallback_models = [self.config.OPENROUTER_FALLBACK_MODEL]
+            
+            # Build list of models to try: [base, fallback_1, fallback_2, fallback_3]
+            models_to_try = [base_model] + fallback_models
+            
+            last_error = None
+            for idx, model_to_try in enumerate(models_to_try):
+                try:
+                    if chart:
+                        openrouter_response = await self.openrouter_client.chat_completion_with_chart_analysis(
+                            model_to_try, messages, cast(Any, chart_image), openrouter_config
+                        )
+                    else:
+                        openrouter_response = await self.openrouter_client.chat_completion(model_to_try, messages, openrouter_config)
+                    
+                    if self._is_valid_response(openrouter_response):
+                        if idx == 0:
+                            self.logger.info(
+                                f"✅ OpenRouter: Successfully used base model '{model_to_try}' "
+                                f"as fallback after Google AI Studio failure"
+                            )
+                        else:
+                            priority = idx  # 1-based priority (1, 2, 3)
+                            self.logger.info(
+                                f"✅ OpenRouter: Successfully used fallback_model_{priority} '{model_to_try}' "
+                                f"as fallback after Google AI Studio failure (tried {idx+1} OpenRouter models)"
+                            )
+                        return openrouter_response
+                    else:
+                        error_msg = openrouter_response.get("error", "Invalid response") if isinstance(openrouter_response, dict) else "Invalid response"
+                        self.logger.warning(
+                            f"⚠️ OpenRouter model '{model_to_try}' (priority {idx+1}/{len(models_to_try)}) failed: {error_msg}"
+                        )
+                        last_error = error_msg
+                        
+                except Exception as e:
+                    self.logger.warning(
+                        f"⚠️ OpenRouter model '{model_to_try}' (priority {idx+1}/{len(models_to_try)}) exception: {str(e)}"
+                    )
+                    last_error = str(e)
+                    continue
+            
+            # All OpenRouter models also failed
+            error_detail = last_error if last_error else "All OpenRouter fallback models exhausted"
+            self.logger.error(
+                f"❌ Google AI Studio + OpenRouter: All models failed "
+                f"(Google AI Studio: free+paid tiers, OpenRouter: {len(models_to_try)} models). "
+                f"Last error: {error_detail}"
+            )
+            return cast(ResponseDict, {
+                "error": f"All Google AI Studio and OpenRouter models failed: {error_detail}"
+            })
+        else:
+            # OpenRouter client not available
+            error_detail = response.get("error", "Unknown error") if response else "No response"
+            self.logger.error(
+                f"❌ Google AI Studio failed and OpenRouter client not available. "
+                f"Last error: {error_detail}"
+            )
+            return response
 
     def _valid_for_provider(self, provider: str, response: Optional[Dict[str, Any]]) -> bool:
         """Check validity and rate-limit conditions per provider."""
