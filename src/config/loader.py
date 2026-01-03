@@ -183,11 +183,15 @@ class Config:
     @property
     def GOOGLE_STUDIO_API_KEY(self):
         return self.get_env('GOOGLE_STUDIO_API_KEY')
-    
+
     @property
     def GOOGLE_STUDIO_PAID_API_KEY(self):
         return self.get_env('GOOGLE_STUDIO_PAID_API_KEY')
-    
+
+    @property
+    def GROQ_API_KEY(self):
+        return self.get_env('GROQ_API_KEY')
+
     @property
     def CRYPTOCOMPARE_API_KEY(self):
         return self.get_env('CRYPTOCOMPARE_API_KEY')
@@ -312,6 +316,14 @@ class Config:
     @property
     def GOOGLE_STUDIO_MODEL(self):
         return self.get_config('ai_providers', 'google_studio_model', 'gemini-2.5-flash')
+
+    @property
+    def GROQ_BASE_URL(self):
+        return self.get_config('ai_providers', 'groq_base_url', 'https://api.groq.com/openai/v1')
+
+    @property
+    def GROQ_MODEL(self):
+        return self.get_config('ai_providers', 'groq_model', 'llama-3.3-70b-versatile')
     
     # General Configuration
     @property

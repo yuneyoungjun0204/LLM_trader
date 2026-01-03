@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from src.logger.logger import Logger
 from src.platforms.ai_providers.openrouter import ResponseDict
-from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, LMStudioClient, OllamaClient
+from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, GroqClient, LMStudioClient, OllamaClient
 from src.utils.token_counter import TokenCounter
 from src.contracts.manager_factory import ModelManagerProtocol
 from src.factories import ProviderFactory
@@ -43,6 +43,7 @@ class ModelManager(ModelManagerProtocol):
         self.openrouter_client: Optional[OpenRouterClient] = clients['openrouter']
         self.google_client: Optional[GoogleAIClient] = clients['google']
         self.google_paid_client: Optional[GoogleAIClient] = clients['google_paid']
+        self.groq_client: Optional[GroqClient] = clients['groq']
         self.lm_studio_client: Optional[LMStudioClient] = clients['lmstudio']
         self.ollama_client: Optional[OllamaClient] = clients['ollama']
 
@@ -52,6 +53,7 @@ class ModelManager(ModelManagerProtocol):
 
         # Cache model names from config (DRY - avoid repeated config lookups)
         self.google_model = self.config.GOOGLE_STUDIO_MODEL
+        self.groq_model = self.config.GROQ_MODEL
         self.openrouter_model = self.config.OPENROUTER_BASE_MODEL
         self.lmstudio_model = self.config.LM_STUDIO_MODEL
         self.ollama_main_model = self.config.OLLAMA_MAIN_MODEL
@@ -62,6 +64,7 @@ class ModelManager(ModelManagerProtocol):
         # Create model configurations as instance variables
         self.model_config = self.config.get_model_config(self.lmstudio_model)
         self.google_config = self.config.get_model_config(self.google_model)
+        self.groq_config = self.config.get_model_config(self.groq_model)
         self.openrouter_config = self.config.get_model_config(self.openrouter_model)
         self.ollama_main_config = self.config.get_model_config(self.ollama_main_model, {'temperature': 0.3, 'top_p': 0.9})
         self.ollama_math_config = self.config.get_model_config(self.ollama_math_model, {'temperature': 0.1, 'top_p': 0.9})
@@ -88,6 +91,14 @@ class ModelManager(ModelManagerProtocol):
                 'config': self.google_config,
                 'supports_chart': True,
                 'has_rate_limits': True  # Google has rate limits (free tier: 20 req/day)
+            },
+            'groq': {
+                'name': 'Groq',
+                'client': self.groq_client,
+                'default_model': self.groq_model,
+                'config': self.groq_config,
+                'supports_chart': False,
+                'has_rate_limits': True  # Groq has rate limits
             },
             'openrouter': {
                 'name': 'OpenRouter',

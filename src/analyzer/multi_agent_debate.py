@@ -52,44 +52,47 @@ class MultiAgentDebateSystem:
         self,
         symbol: str,
         current_price: float,
-        provider: Optional[str] = None,
-        model: Optional[str] = None
+        provider: Optional[str] = None,  # Not used - each agent has fixed provider
+        model: Optional[str] = None  # Not used - each agent has fixed model
     ) -> Dict[str, Any]:
         """
         Conduct a multi-agent debate and return the final decision.
 
         This method orchestrates the debate in three phases:
-        1. Aggressive agent analyzes and provides opinion
-        2. Conservative agent reviews aggressive opinion and provides counter-opinion
-        3. Referee agent synthesizes both opinions and makes final decision
+        1. Aggressive agent analyzes (Google AI → OpenRouter fallback)
+        2. Conservative agent reviews aggressive opinion (Google AI → OpenRouter fallback)
+        3. Referee agent synthesizes both opinions (Groq → OpenRouter fallback)
 
         Args:
             symbol: Trading pair symbol
             current_price: Current market price
-            provider: Optional AI provider override
-            model: Optional AI model override
+            provider: Optional AI provider override (ignored - each agent has fixed provider)
+            model: Optional AI model override (ignored - each agent has fixed model)
 
         Returns:
             Final decision dictionary with all agent opinions
         """
         self.logger.info("🎭 Starting Multi-Agent Debate System")
+        self.logger.info("   🔴 Aggressive: Google AI → OpenRouter")
+        self.logger.info("   🔵 Conservative: Google AI → OpenRouter")
+        self.logger.info("   ⚖️ Referee: Google AI → OpenRouter")
 
-        # Phase 1: Aggressive Agent Analysis
+        # Phase 1: Aggressive Agent Analysis (Google AI)
         self.logger.info("🔴 Phase 1: Aggressive Agent analyzing...")
         aggressive_opinion = await self._run_aggressive_agent(
-            symbol, current_price, provider, model
+            symbol, current_price
         )
 
-        # Phase 2: Conservative Agent Review & Counter-Opinion
+        # Phase 2: Conservative Agent Review & Counter-Opinion (Google AI)
         self.logger.info("🔵 Phase 2: Conservative Agent reviewing and countering...")
         conservative_opinion = await self._run_conservative_agent(
-            symbol, current_price, aggressive_opinion, provider, model
+            symbol, current_price, aggressive_opinion
         )
 
-        # Phase 3: Referee Agent Final Judgment
+        # Phase 3: Referee Agent Final Judgment (Groq)
         self.logger.info("⚖️ Phase 3: Referee Agent making final judgment...")
         final_decision = await self._run_referee_agent(
-            symbol, current_price, aggressive_opinion, conservative_opinion, provider, model
+            symbol, current_price, aggressive_opinion, conservative_opinion
         )
 
         # Log debate summary
@@ -145,9 +148,7 @@ class MultiAgentDebateSystem:
     async def _run_aggressive_agent(
         self,
         symbol: str,
-        current_price: float,
-        provider: Optional[str],
-        model: Optional[str]
+        current_price: float
     ) -> Dict[str, Any]:
         """
         Run the Aggressive Agent analysis.
@@ -158,11 +159,11 @@ class MultiAgentDebateSystem:
         - Entry opportunities even near resistance zones
         - Trigger timeframe strength
 
+        Provider: Google AI → OpenRouter (fallback)
+
         Args:
             symbol: Trading pair
             current_price: Current price
-            provider: AI provider
-            model: AI model
 
         Returns:
             Aggressive agent's opinion
@@ -200,12 +201,12 @@ Be BOLD but RATIONAL. Provide specific price levels and clear reasoning."""
         user_prompt = self._build_market_data_prompt(symbol, current_price)
         user_prompt += "\n\nAs the AGGRESSIVE AGENT, provide your analysis and trading recommendation."
 
-        # Call AI model
+        # Call AI model with Google AI (fallback to OpenRouter if fails)
         response = await self.model_manager.send_prompt_streaming(
             prompt=user_prompt,
             system_message=system_prompt,
-            provider=provider,
-            model=model
+            provider="googleai",  # Fixed: Google AI
+            model=None  # Use default model for provider
         )
 
         # Parse response
@@ -216,9 +217,7 @@ Be BOLD but RATIONAL. Provide specific price levels and clear reasoning."""
         self,
         symbol: str,
         current_price: float,
-        aggressive_opinion: Dict[str, Any],
-        provider: Optional[str],
-        model: Optional[str]
+        aggressive_opinion: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Run the Conservative Agent analysis.
@@ -229,12 +228,12 @@ Be BOLD but RATIONAL. Provide specific price levels and clear reasoning."""
         - Challenges overly aggressive entries
         - Provides counter-arguments and warnings
 
+        Provider: Google AI → OpenRouter (fallback)
+
         Args:
             symbol: Trading pair
             current_price: Current price
             aggressive_opinion: Opinion from Aggressive Agent
-            provider: AI provider
-            model: AI model
 
         Returns:
             Conservative agent's opinion
@@ -289,12 +288,12 @@ REMEMBER: You are the VOICE OF CAUTION. Challenge weak arguments. Protect capita
         user_prompt += f"SL: {aggressive_opinion.get('stop_loss', 0)}\n"
         user_prompt += "\n\nAs the CONSERVATIVE AGENT, review the Aggressive Agent's opinion and provide YOUR counter-analysis."
 
-        # Call AI model
+        # Call AI model with Google AI (fallback to OpenRouter if fails)
         response = await self.model_manager.send_prompt_streaming(
             prompt=user_prompt,
             system_message=system_prompt,
-            provider=provider,
-            model=model
+            provider="googleai",  # Fixed: Google AI
+            model=None  # Use default model for provider
         )
 
         # Parse response
@@ -306,9 +305,7 @@ REMEMBER: You are the VOICE OF CAUTION. Challenge weak arguments. Protect capita
         symbol: str,
         current_price: float,
         aggressive_opinion: Dict[str, Any],
-        conservative_opinion: Dict[str, Any],
-        provider: Optional[str],
-        model: Optional[str]
+        conservative_opinion: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Run the Referee Agent to make final decision.
@@ -319,13 +316,13 @@ REMEMBER: You are the VOICE OF CAUTION. Challenge weak arguments. Protect capita
         - Makes a balanced final decision
         - Can side with either agent or find middle ground
 
+        Provider: Google AI → OpenRouter (fallback)
+
         Args:
             symbol: Trading pair
             current_price: Current price
             aggressive_opinion: Opinion from Aggressive Agent
             conservative_opinion: Opinion from Conservative Agent
-            provider: AI provider
-            model: AI model
 
         Returns:
             Referee's final decision
@@ -363,35 +360,59 @@ REMEMBER:
 - Explain clearly which arguments won and why
 - Ensure TP/SL make sense (LONG: SL < entry < TP, SHORT: TP < entry < SL)"""
 
-        user_prompt = self._build_market_data_prompt(symbol, current_price)
-        user_prompt += "\n\n=== DEBATE TRANSCRIPT ===\n"
-        user_prompt += f"\n--- AGGRESSIVE AGENT ---\n"
-        user_prompt += f"Decision: {aggressive_opinion.get('decision', 'UNKNOWN')}\n"
-        user_prompt += f"Confidence: {aggressive_opinion.get('confidence', 0)}%\n"
-        user_prompt += f"Reasoning: {aggressive_opinion.get('reasoning', 'N/A')}\n"
-        user_prompt += f"Entry: {aggressive_opinion.get('entry_price', current_price)} | "
-        user_prompt += f"TP: {aggressive_opinion.get('take_profit', 0)} | "
-        user_prompt += f"SL: {aggressive_opinion.get('stop_loss', 0)}\n"
+        # Build detailed prompt for Referee with FULL analysis from both agents
+        user_prompt = f"""Symbol: {symbol}
+Current Price: ${current_price:,.2f}
 
-        user_prompt += f"\n--- CONSERVATIVE AGENT ---\n"
-        user_prompt += f"Decision: {conservative_opinion.get('decision', 'UNKNOWN')}\n"
-        user_prompt += f"Confidence: {conservative_opinion.get('confidence', 0)}%\n"
-        user_prompt += f"Reasoning: {conservative_opinion.get('reasoning', 'N/A')}\n"
-        user_prompt += f"Entry: {conservative_opinion.get('entry_price', current_price)} | "
-        user_prompt += f"TP: {conservative_opinion.get('take_profit', 0)} | "
-        user_prompt += f"SL: {conservative_opinion.get('stop_loss', 0)}\n"
+=== COMPLETE DEBATE ANALYSIS ===
 
-        if "rebuttal_to_aggressive" in conservative_opinion:
-            user_prompt += f"Rebuttal: {conservative_opinion['rebuttal_to_aggressive']}\n"
+🔴 AGGRESSIVE AGENT'S FULL ANALYSIS:
+Decision: {aggressive_opinion.get('decision', 'UNKNOWN')} {aggressive_opinion.get('direction', 'NEUTRAL')}
+Confidence: {aggressive_opinion.get('confidence', 0)}%
+Entry Price: ${aggressive_opinion.get('entry_price', current_price):,.2f}
+Take Profit: ${aggressive_opinion.get('take_profit', 0):,.2f}
+Stop Loss: ${aggressive_opinion.get('stop_loss', 0):,.2f}
 
-        user_prompt += "\n\nAs the REFEREE, review both opinions and make your FINAL BINDING DECISION."
+Full Reasoning:
+{aggressive_opinion.get('reasoning', 'N/A')}
 
-        # Call AI model
+Key Factors:
+{', '.join(aggressive_opinion.get('key_factors', ['N/A']))}
+
+Momentum Indicators:
+{', '.join(aggressive_opinion.get('momentum_indicators', ['N/A']))}
+
+---
+
+🔵 CONSERVATIVE AGENT'S FULL ANALYSIS:
+Decision: {conservative_opinion.get('decision', 'UNKNOWN')} {conservative_opinion.get('direction', 'NEUTRAL')}
+Confidence: {conservative_opinion.get('confidence', 0)}%
+Entry Price: ${conservative_opinion.get('entry_price', current_price):,.2f}
+Take Profit: ${conservative_opinion.get('take_profit', 0):,.2f}
+Stop Loss: ${conservative_opinion.get('stop_loss', 0):,.2f}
+
+Full Reasoning:
+{conservative_opinion.get('reasoning', 'N/A')}
+
+Key Factors:
+{', '.join(conservative_opinion.get('key_factors', ['N/A']))}
+
+Warnings:
+{', '.join(conservative_opinion.get('warnings', ['N/A']))}
+
+Rebuttal to Aggressive Agent:
+{conservative_opinion.get('rebuttal_to_aggressive', 'None')}
+
+---
+
+As the REFEREE, review BOTH agents' COMPLETE analyses and make your FINAL BINDING DECISION."""
+
+        # Call AI model with Google AI (fallback to OpenRouter if fails)
         response = await self.model_manager.send_prompt_streaming(
             prompt=user_prompt,
             system_message=system_prompt,
-            provider=provider,
-            model=model
+            provider="googleai",  # Fixed: Google AI (same as other agents)
+            model=None  # Use default model for provider
         )
 
         # Parse response
@@ -425,30 +446,57 @@ REMEMBER:
         import json
         import re
 
+        # DEBUG: Log raw response details
+        self.logger.debug(f"[{agent_name}] Raw response length: {len(response)} chars")
+        self.logger.debug(f"[{agent_name}] Raw response (first 500 chars): {response[:500]}")
+        self.logger.debug(f"[{agent_name}] Raw response (last 200 chars): {response[-200:]}")
+
         try:
             # Try to extract JSON from response
             json_match = re.search(r'\{[\s\S]*\}', response)
             if json_match:
-                parsed = json.loads(json_match.group())
+                json_str = json_match.group()
+                self.logger.debug(f"[{agent_name}] JSON match found, length: {len(json_str)} chars")
+                self.logger.debug(f"[{agent_name}] JSON content (first 300 chars): {json_str[:300]}")
+
+                parsed = json.loads(json_str)
+                self.logger.debug(f"[{agent_name}] Successfully parsed JSON with keys: {list(parsed.keys())}")
+
                 parsed['agent_name'] = agent_name
                 parsed['raw_response'] = response
                 return parsed
             else:
-                self.logger.warning(f"{agent_name} agent returned non-JSON response")
+                self.logger.warning(f"[{agent_name}] No JSON pattern found in response")
+                self.logger.warning(f"[{agent_name}] Full response for inspection: {response}")
                 return {
                     "agent_name": agent_name,
                     "decision": "HOLD",
                     "direction": "NEUTRAL",
                     "confidence": 50,
-                    "reasoning": f"{agent_name} parsing failed",
+                    "reasoning": f"{agent_name} parsing failed - no JSON found",
                     "take_profit": 0,
                     "stop_loss": 0,
                     "entry_price": 0,
                     "parse_error": True,
                     "raw_response": response
                 }
+        except json.JSONDecodeError as e:
+            self.logger.error(f"[{agent_name}] JSON decode error: {e}")
+            self.logger.error(f"[{agent_name}] Attempted to parse: {json_match.group() if json_match else 'N/A'}")
+            return {
+                "agent_name": agent_name,
+                "decision": "HOLD",
+                "direction": "NEUTRAL",
+                "confidence": 50,
+                "reasoning": f"JSON decode error: {str(e)}",
+                "take_profit": 0,
+                "stop_loss": 0,
+                "entry_price": 0,
+                "parse_error": True,
+                "raw_response": response
+            }
         except Exception as e:
-            self.logger.error(f"Failed to parse {agent_name} agent response: {e}")
+            self.logger.error(f"[{agent_name}] Failed to parse agent response: {e}")
             return {
                 "agent_name": agent_name,
                 "decision": "HOLD",

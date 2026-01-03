@@ -34,10 +34,13 @@ class ConfigProtocol(Protocol):
     
     @property
     def GOOGLE_STUDIO_API_KEY(self) -> str | None: ...
-    
+
     @property
     def GOOGLE_STUDIO_PAID_API_KEY(self) -> str | None: ...
-    
+
+    @property
+    def GROQ_API_KEY(self) -> str | None: ...
+
     @property
     def CRYPTOCOMPARE_API_KEY(self) -> str | None: ...
     
@@ -66,8 +69,14 @@ class ConfigProtocol(Protocol):
     
     @property
     def GOOGLE_STUDIO_MODEL(self) -> str: ...
-    
-    
+
+    @property
+    def GROQ_BASE_URL(self) -> str: ...
+
+    @property
+    def GROQ_MODEL(self) -> str: ...
+
+
 
     @property
     def LOGGER_DEBUG(self) -> bool: ...

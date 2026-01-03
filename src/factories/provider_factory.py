@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from src.config.protocol import ConfigProtocol
 
 from src.logger.logger import Logger
-from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, LMStudioClient, OllamaClient
+from src.platforms.ai_providers import OpenRouterClient, GoogleAIClient, GroqClient, LMStudioClient, OllamaClient
 
 
 class ProviderFactory:
@@ -99,6 +99,24 @@ class ProviderFactory:
         self.logger.debug(f"LM Studio client initialized for URL: {self.config.LM_STUDIO_BASE_URL}")
         return client
 
+    def create_groq_client(self) -> Optional[GroqClient]:
+        """
+        Create Groq client for high-speed inference.
+
+        Returns:
+            GroqClient instance or None if API key not configured.
+        """
+        if not self.config.GROQ_API_KEY:
+            return None
+
+        client = GroqClient(
+            api_key=self.config.GROQ_API_KEY,
+            base_url=self.config.GROQ_BASE_URL,
+            logger=self.logger
+        )
+        self.logger.debug(f"Groq client initialized for URL: {self.config.GROQ_BASE_URL}")
+        return client
+
     def create_ollama_client(self) -> Optional[OllamaClient]:
         """
         Create Ollama client for local inference with task-based model selection.
@@ -121,7 +139,7 @@ class ProviderFactory:
         Create all available AI provider clients based on configuration.
 
         Returns:
-            Dictionary with keys: 'google', 'google_paid', 'openrouter', 'lmstudio', 'ollama'.
+            Dictionary with keys: 'google', 'google_paid', 'groq', 'openrouter', 'lmstudio', 'ollama'.
             Values are client instances or None if not configured.
         """
         google_client, google_paid_client = self.create_google_clients()
@@ -129,6 +147,7 @@ class ProviderFactory:
         return {
             'google': google_client,
             'google_paid': google_paid_client,
+            'groq': self.create_groq_client(),
             'openrouter': self.create_openrouter_client(),
             'lmstudio': self.create_lmstudio_client(),
             'ollama': self.create_ollama_client()
