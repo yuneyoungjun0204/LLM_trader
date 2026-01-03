@@ -342,6 +342,11 @@ class Config:
     def AI_CHART_CANDLE_LIMIT(self):
         """Configured candle limit to use for AI chart images (must be present in config.ini)."""
         return int(self.get_config('general', 'ai_chart_candle_limit', 200))
+
+    @property
+    def USE_MULTI_AGENT_DEBATE(self):
+        """Enable true multi-agent debate system (3 separate AI calls for cross-validation)."""
+        return self.get_config('general', 'use_multi_agent_debate', False)
     
     # Debug Configuration
     @property

@@ -83,8 +83,11 @@ class ConfigProtocol(Protocol):
     
     @property
     def AI_CHART_CANDLE_LIMIT(self) -> int: ...
-    
-    
+
+    @property
+    def USE_MULTI_AGENT_DEBATE(self) -> bool: ...
+
+
 
     @property
     def DEBUG_SAVE_CHARTS(self) -> bool: ...

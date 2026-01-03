@@ -358,8 +358,8 @@ class AnalysisEngine:
             self.context.technical_patterns = technical_patterns
 
     async def _generate_ai_analysis(
-        self, 
-        provider: Optional[str], 
+        self,
+        provider: Optional[str],
         model: Optional[str],
         additional_context: Optional[str] = None,
         previous_response: Optional[str] = None,
@@ -370,32 +370,10 @@ class AnalysisEngine:
         last_analysis_time: Optional[str] = None
     ) -> Dict[str, Any]:
         """Generate AI analysis using prompt builder and result processor"""
-        
-        # Check if chart analysis is supported by the current provider
-        has_chart_analysis = self.model_manager.supports_image_analysis(provider)
-        chart_image: Optional[io.BytesIO] = None
-        
-        if has_chart_analysis:
-            chart_image = await self._generate_chart_image()
-            if chart_image is None:
-                has_chart_analysis = False
-                self.logger.warning("Chart generation failed, proceeding without chart analysis")
-        
-        system_prompt = self.prompt_builder.build_system_prompt(
-            self.symbol, 
-            has_chart_analysis, 
-            previous_response,
-            position_context,
-            performance_context,
-            brain_context,
-            last_analysis_time
-        )
-        prompt = self.prompt_builder.build_prompt(
-            context=self.context,
-            has_chart_analysis=has_chart_analysis,
-            additional_context=additional_context,
-            previous_indicators=previous_indicators
-        )
+
+        # Check if multi-agent debate is enabled
+        use_debate = self.config.USE_MULTI_AGENT_DEBATE
+
         # Process analysis
         if self.config.TEST_ENVIRONMENT:
             self.logger.debug(f"TEST_ENVIRONMENT is True - using mock analysis")
@@ -406,51 +384,128 @@ class AnalysisEngine:
                 technical_history=getattr(self.context, 'technical_history', None),
                 technical_data=getattr(self.context, 'technical_data', None)
             )
+        elif use_debate:
+            # Use true multi-agent debate system (3 API calls)
+            self.logger.info("🎭 Using Multi-Agent Debate System (3 AI calls)")
+            analysis_result = await self._execute_multi_agent_debate(
+                provider, model
+            )
         else:
+            # Use traditional single-call approach
+            self.logger.info("📝 Using Single-Agent Analysis (1 AI call)")
+
+            # Check if chart analysis is supported by the current provider
+            has_chart_analysis = self.model_manager.supports_image_analysis(provider)
+            chart_image: Optional[io.BytesIO] = None
+
+            if has_chart_analysis:
+                chart_image = await self._generate_chart_image()
+                if chart_image is None:
+                    has_chart_analysis = False
+                    self.logger.warning("Chart generation failed, proceeding without chart analysis")
+
+            system_prompt = self.prompt_builder.build_system_prompt(
+                self.symbol,
+                has_chart_analysis,
+                previous_response,
+                position_context,
+                performance_context,
+                brain_context,
+                last_analysis_time
+            )
+            prompt = self.prompt_builder.build_prompt(
+                context=self.context,
+                has_chart_analysis=has_chart_analysis,
+                additional_context=additional_context,
+                previous_indicators=previous_indicators
+            )
+
             analysis_result = await self._execute_ai_request(
                 system_prompt, prompt, provider, model, chart_image
             )
-            
+
+            # Add chart analysis flag for single-agent
+            has_chart_analysis_flag = has_chart_analysis
+
         # Add metadata to result
         analysis_result["article_urls"] = self.article_urls
         analysis_result["timeframe"] = self.context.timeframe
-        actual_provider, actual_model = self.model_manager.describe_provider_and_model(provider, model, chart=has_chart_analysis)
+
+        # Set proper chart_analysis flag
+        if use_debate:
+            has_chart_analysis_flag = False  # Multi-agent debate doesn't use charts (text-only)
+
+        actual_provider, actual_model = self.model_manager.describe_provider_and_model(provider, model, chart=has_chart_analysis_flag)
         analysis_result["provider"] = actual_provider
         analysis_result["model"] = actual_model
-        analysis_result["chart_analysis"] = has_chart_analysis
-        
+        analysis_result["chart_analysis"] = has_chart_analysis_flag
+
         # Add technical_data for persistence (will be saved to previous_response.json)
         if hasattr(self.context, 'technical_data'):
             analysis_result["technical_data"] = self.context.technical_data
-        
+
         return analysis_result
 
+    async def _execute_multi_agent_debate(
+        self,
+        provider: Optional[str],
+        model: Optional[str]
+    ) -> Dict[str, Any]:
+        """Execute multi-agent debate system (3 separate AI calls).
+
+        Args:
+            provider: Optional provider override
+            model: Optional model override
+
+        Returns:
+            Analysis result dictionary from the Referee agent's final decision
+        """
+        from src.analyzer.multi_agent_debate import MultiAgentDebateSystem
+
+        # Create debate system
+        debate_system = MultiAgentDebateSystem(
+            model_manager=self.model_manager,
+            logger=self.logger,
+            context=self.context,
+            prompt_builder=self.prompt_builder
+        )
+
+        # Conduct the debate
+        debate_result = await debate_system.conduct_debate(
+            symbol=self.symbol,
+            current_price=self.context.current_price,
+            provider=provider,
+            model=model
+        )
+
+        return debate_result
+
     async def _execute_ai_request(
-        self, 
-        system_prompt: str, 
-        prompt: str, 
-        provider: Optional[str], 
+        self,
+        system_prompt: str,
+        prompt: str,
+        provider: Optional[str],
         model: Optional[str],
         chart_image: Optional[io.BytesIO] = None
     ) -> Dict[str, Any]:
         """Execute the AI request with optional chart image for visual analysis.
-        
+
         Args:
             system_prompt: System instructions for the AI
             prompt: User prompt with market data
             provider: Optional provider override
             model: Optional model override
             chart_image: Optional chart image for visual analysis
-            
+
         Returns:
             Analysis result dictionary
         """
         if provider and model:
             self.logger.info(f"Using admin-specified provider: {provider}, model: {model}")
-        
+
         # Give result processor access to context for current_price
         self.result_processor.context = self.context
-        
+
         # Pass chart image to result processor (it will use chart analysis if image provided)
         return await self.result_processor.process_analysis(
             system_prompt, prompt, chart_image=chart_image, provider=provider, model=model
