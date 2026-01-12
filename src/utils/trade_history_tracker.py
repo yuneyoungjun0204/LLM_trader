@@ -202,3 +202,4 @@ class TradeHistoryTracker:
             'total_pnl': total_pnl
         }
 
+
