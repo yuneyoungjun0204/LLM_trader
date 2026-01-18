@@ -19,10 +19,12 @@ class MarketDataCollector:
     def __init__(self, 
                 logger: Logger, 
                 rag_engine: "RagEngine",
-                alternative_me_api: Optional[AlternativeMeAPI] = None):
+                alternative_me_api: Optional[AlternativeMeAPI] = None,
+                enable_news: bool = True):
         self.logger = logger
         self.rag_engine = rag_engine
         self.alternative_me_api = alternative_me_api
+        self.enable_news = enable_news  # 뉴스 분석 활성화/비활성화 플래그
         
         # Will be set by initialize method
         self.data_fetcher = None
@@ -90,23 +92,29 @@ class MarketDataCollector:
             # Fetch multi-timeframe data for MTF analysis
             await self.fetch_multi_timeframe_data(context)
 
-            # Fetch news context via RAG engine
-            market_context = await self.rag_engine.retrieve_context(
-                "current market news analysis trends",
-                self.symbol,
-                k=self.rag_engine.config.RAG_NEWS_LIMIT
-            )
-            result["market_context"] = market_context
+            # Fetch news context via RAG engine (if enabled)
+            if self.enable_news:
+                market_context = await self.rag_engine.retrieve_context(
+                    "current market news analysis trends",
+                    self.symbol,
+                    k=self.rag_engine.config.RAG_NEWS_LIMIT
+                )
+                result["market_context"] = market_context
 
-            # Store article URLs from RAG engine
-            try:
-                self.article_urls = self.rag_engine.context_builder.get_latest_article_urls()
-                # self.logger.debug(f"Retrieved {len(self.article_urls)} article URLs from RAG engine")
-            except Exception as e:
-                self.logger.warning(f"Could not retrieve article URLs from RAG engine: {e}")
-                self.article_urls = {}
+                # Store article URLs from RAG engine
+                try:
+                    self.article_urls = self.rag_engine.context_builder.get_latest_article_urls()
+                    # self.logger.debug(f"Retrieved {len(self.article_urls)} article URLs from RAG engine")
+                except Exception as e:
+                    self.logger.warning(f"Could not retrieve article URLs from RAG engine: {e}")
+                    self.article_urls = {}
 
-            result["article_urls"] = self.article_urls
+                result["article_urls"] = self.article_urls
+            else:
+                # News analysis disabled - return empty context
+                result["market_context"] = {}
+                result["article_urls"] = {}
+                self.logger.debug("News analysis disabled - skipping news collection")
 
         except Exception as e:
             self.logger.exception(f"Error collecting market data: {e}")

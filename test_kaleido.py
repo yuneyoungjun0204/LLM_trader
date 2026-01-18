@@ -53,7 +53,7 @@ try:
 
     # Simulate realistic price data
     base_price = 50000  # BTC-like price
-    dates = pd.date_range('2024-01-01', periods=n_candles, freq='1H')
+    dates = pd.date_range('2023-01-01', periods=n_candles, freq='1H')
 
     close_prices = base_price + np.cumsum(np.random.randn(n_candles) * 100)
     open_prices = close_prices + np.random.randn(n_candles) * 50

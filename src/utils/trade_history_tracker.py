@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 @dataclass
 class TradeResult:
     """Individual trade result record."""
+    pair: str  # Trading pair (e.g., 'BTC/USDT:USDT')
     entry_time: datetime
     exit_time: datetime
     entry_price: float
@@ -25,11 +26,11 @@ class TradeResult:
 class TradeHistoryTracker:
     """Tracks trade history and identifies patterns to prevent repeated losses."""
     
-    def __init__(self, max_history: int = 50):
+    def __init__(self, max_history: int = 400):
         """Initialize trade history tracker.
         
         Args:
-            max_history: Maximum number of trades to keep in memory
+            max_history: Maximum number of trades to keep in memory (default: 400)
         """
         self.max_history = max_history
         self.trade_history: List[TradeResult] = []
@@ -38,7 +39,8 @@ class TradeHistoryTracker:
         self,
         trade_entry: Dict[str, Any],
         trade_exit: Dict[str, Any],
-        outcome: Dict[str, Any]
+        outcome: Dict[str, Any],
+        pair: Optional[str] = None
     ) -> None:
         """Add a completed trade to history.
         
@@ -46,8 +48,13 @@ class TradeHistoryTracker:
             trade_entry: Entry trade information
             trade_exit: Exit trade information
             outcome: Trade outcome (profit/loss, etc.)
+            pair: Trading pair (e.g., 'BTC/USDT:USDT'). If None, extracted from trade_entry.
         """
         try:
+            # Extract pair information
+            if pair is None:
+                pair = trade_entry.get('pair', trade_entry.get('symbol', 'UNKNOWN'))
+            
             # Extract entry information
             entry_time = trade_entry.get('open_date', datetime.now())
             if isinstance(entry_time, str):
@@ -68,6 +75,7 @@ class TradeHistoryTracker:
             
             # Create trade result
             trade_result = TradeResult(
+                pair=pair,
                 entry_time=entry_time,
                 exit_time=exit_time,
                 entry_price=entry_price,
@@ -93,6 +101,7 @@ class TradeHistoryTracker:
         self,
         current_signal: Dict[str, Any],
         market_context: Dict[str, Any],
+        pair: Optional[str] = None,
         similarity_threshold: float = 0.7
     ) -> Optional[Dict[str, Any]]:
         """Check if current signal is similar to past losing trades.
@@ -100,6 +109,7 @@ class TradeHistoryTracker:
         Args:
             current_signal: Current AI decision signal
             market_context: Current market conditions
+            pair: Trading pair to filter by (if None, checks all pairs)
             similarity_threshold: Minimum similarity score to trigger warning (0.0-1.0)
         
         Returns:
@@ -108,11 +118,17 @@ class TradeHistoryTracker:
         if not self.trade_history:
             return None
         
-        # Filter to only losing trades
-        losing_trades = [
-            trade for trade in self.trade_history
-            if trade.profit_loss_pct < 0
-        ]
+        # Filter to only losing trades (optionally by pair)
+        if pair:
+            losing_trades = [
+                trade for trade in self.trade_history
+                if trade.profit_loss_pct < 0 and trade.pair == pair
+            ]
+        else:
+            losing_trades = [
+                trade for trade in self.trade_history
+                if trade.profit_loss_pct < 0
+            ]
         
         if not losing_trades:
             return None
@@ -200,6 +216,86 @@ class TradeHistoryTracker:
             'avg_profit': avg_profit,
             'avg_loss': avg_loss,
             'total_pnl': total_pnl
+        }
+    
+    def get_recent_decisions_by_pair(self, pair: str, last_n: int = 10) -> List[TradeResult]:
+        """Get recent trading decisions for a specific pair.
+        
+        Args:
+            pair: Trading pair (e.g., 'BTC/USDT:USDT')
+            last_n: Number of recent decisions to return (default: 10)
+        
+        Returns:
+            List of TradeResult objects for the specified pair, sorted by entry_time (oldest first)
+        """
+        # Filter trades for this pair
+        pair_trades = [t for t in self.trade_history if t.pair == pair]
+        
+        # Sort by entry_time (oldest first) and return last_n
+        pair_trades.sort(key=lambda x: x.entry_time)
+        return pair_trades[-last_n:] if len(pair_trades) > last_n else pair_trades
+    
+    def get_recent_decisions_summary_by_pair(self, pair: str, last_n: int = 10) -> Dict[str, Any]:
+        """Get summary of recent trading decisions for a specific pair.
+        
+        Args:
+            pair: Trading pair (e.g., 'BTC/USDT:USDT')
+            last_n: Number of recent decisions to analyze (default: 10)
+        
+        Returns:
+            Dictionary with performance statistics for the pair
+        """
+        recent_trades = self.get_recent_decisions_by_pair(pair, last_n)
+        
+        if not recent_trades:
+            return {
+                'pair': pair,
+                'total_trades': 0,
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'win_rate': 0.0,
+                'avg_profit': 0.0,
+                'avg_loss': 0.0,
+                'total_pnl': 0.0,
+                'decisions': []
+            }
+        
+        winning_trades = [t for t in recent_trades if t.profit_loss_pct > 0]
+        losing_trades = [t for t in recent_trades if t.profit_loss_pct < 0]
+        
+        total_trades = len(recent_trades)
+        wins = len(winning_trades)
+        losses = len(losing_trades)
+        
+        win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
+        avg_profit = sum(t.profit_loss_pct for t in winning_trades) / wins if wins > 0 else 0.0
+        avg_loss = sum(t.profit_loss_pct for t in losing_trades) / losses if losses > 0 else 0.0
+        total_pnl = sum(t.profit_loss_pct for t in recent_trades)
+        
+        # Format decisions for summary
+        decisions = []
+        for trade in recent_trades:
+            decisions.append({
+                'entry_time': trade.entry_time.isoformat(),
+                'exit_time': trade.exit_time.isoformat(),
+                'direction': trade.direction,
+                'entry_price': trade.entry_price,
+                'exit_price': trade.exit_price,
+                'profit_loss_pct': trade.profit_loss_pct,
+                'exit_reason': trade.exit_reason,
+                'confidence': trade.confidence
+            })
+        
+        return {
+            'pair': pair,
+            'total_trades': total_trades,
+            'winning_trades': wins,
+            'losing_trades': losses,
+            'win_rate': win_rate,
+            'avg_profit': avg_profit,
+            'avg_loss': avg_loss,
+            'total_pnl': total_pnl,
+            'decisions': decisions
         }
 
 

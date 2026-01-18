@@ -2,7 +2,7 @@
 Template management for prompt building system.
 Handles system prompts, response templates, and analysis steps for TRADING DECISIONS.
 
-Optimized for: Exactly 100 candles per timeframe [5m, 15m, 30m, 1h, 2h]
+Optimized for: Exactly 100 candles per timeframe [1m, 3m, 15m]
 Core Philosophy: High-probability momentum alignment with realistic S/R based on actual data
 """
 
@@ -15,23 +15,23 @@ class TemplateManager:
     """Manages prompt templates, system prompts, and analysis steps for trading decisions.
     
     Data Specification:
-    - Exactly 100 candles are provided for each timeframe: [5m, 15m, 30m, 1h, 2h]
-    - 2h timeframe with 100 candles = approximately 8.3 days (macro context)
+    - Exactly 100 candles are provided for each timeframe: [1m, 3m, 15m]
+    - 15m timeframe with 100 candles = approximately 1.04 days (macro context)
     - All temporal illusions (365d, 360d, 30d+ mentions) are removed
-    - Timeframe roles: 5m/15m = Trigger (entry/exit), 30m/1h/2h = Filter (trend/restriction)
+    - Timeframe roles: 1m = Trigger (entry/exit), 3m = Filter (trend/restriction), 15m = Wall (S/R boundaries)
     """
     
-    # 🔥 CENTRAL TIMEFRAME CONFIGURATION - Simplified to [5m, 15m, 1h]
-    # Simplified Day Trading Strategy:
-    # - 1h (Wall): EMA 20 기울기로 롱/숏 장 판단
-    # - 15m (Filter): RSI 과매도(30 이하) 탈출 또는 EMA 20 위 안착 시 '준비' 신호
-    # - 5m (Trigger): 스토캐스틱 골든크로스 발생 시 즉시 진입, 전저점 기준 손절가
-    TIMEFRAMES: List[str] = ["5m", "15m", "1h"]
-    TRIGGER_TIMEFRAMES: List[str] = ["5m"]  # Entry/exit timing (Stochastic Golden Cross)
+    # 🔥 CENTRAL TIMEFRAME CONFIGURATION - [1m, 3m, 15m]
+    # Day Trading Strategy:
+    # - 15m (Wall): EMA 20 기울기로 롱/숏 장 판단 (Primary S/R boundaries)
+    # - 3m (Filter): RSI 과매도(30 이하) 탈출 또는 EMA 20 위 안착 시 '준비' 신호 (Trend/restriction)
+    # - 1m (Trigger): 스토캐스틱 골든크로스 발생 시 즉시 진입, 전저점 기준 손절가 (Entry/exit timing)
+    TIMEFRAMES: List[str] = ["3m", "15m", "1h"]
+    TRIGGER_TIMEFRAMES: List[str] = ["3m"]  # Entry/exit timing (Stochastic Golden Cross)
     FILTER_TIMEFRAMES: List[str] = ["15m"]  # Trend/restriction (RSI oversold exit, EMA 20 above)
     HARD_WALL_TIMEFRAMES: List[str] = ["1h"]  # Primary S/R boundaries (EMA 20 slope for long/short market)
     MACRO_TIMEFRAME: str = "1h"  # Macro context definition (EMA 20 slope)
-    MACRO_CONTEXT_DAYS: float = 4.17  # Approximate days for macro timeframe (100 candles * 1h / 24h)
+    MACRO_CONTEXT_DAYS: float = 4.16  # Approximate days for macro timeframe (100 candles * 15m / 60 / 24)
     
     def __init__(self, config: Any, logger: Optional[Logger] = None):
         """Initialize the template manager.
@@ -64,7 +64,7 @@ class TemplateManager:
         
         Args:
             symbol: Trading symbol (e.g., "BTC/USDT")
-            timeframe: Timeframe for analysis (e.g., "5m", "1h", "4h")
+            timeframe: Timeframe for analysis (e.g., "1m", "3m", "15m")
             has_chart_image: Whether a chart image is being provided for visual analysis
             previous_response: Previous AI response for context continuity
             position_context: Current position details and unrealized P&L
@@ -110,7 +110,6 @@ class TemplateManager:
             "    - 3+ Timeframes Aligned: +5%",
             "    - 4+ Timeframes Aligned: +10%",
             "    - Wall Penalty (0.5% proximity without volume): -10%",
-            "- **Threshold:** If Confidence >= 30%, you MUST output BUY or SELL. HOLD is only for <30%.",
             "",
         ]
         
@@ -130,6 +129,11 @@ class TemplateManager:
             "- Confidence must match signal strength: only high-confidence trades in strong setups",
             "- MAXIMIZE PROFIT: Learn from past trades, avoid repeated mistakes, improve win rate",
             "- ONE DECISION PER RESPONSE: Provide exactly ONE trading signal (BUY/SELL/HOLD/CLOSE/UPDATE). Never combine decisions like 'CLOSE then HOLD' - make only the immediate action.",
+            "",
+            "🔥 CONFIDENCE THRESHOLD RULE (MANDATORY):",
+            "- If Confidence >= 30%, you MUST output BUY or SELL. HOLD is ONLY allowed when confidence < 30%.",
+            "- NEVER use HOLD if confidence is 30% or higher, even if the setup seems weak.",
+            "- Prefer trading over holding when ANY opportunity exists (even 30-41% confidence is acceptable).",
             "",
             "🔥 BALANCED MOMENTUM ALIGNMENT STRATEGY:",
             "Your goal is to identify trading opportunities with reasonable probability while maintaining risk discipline.",
@@ -160,7 +164,7 @@ class TemplateManager:
             "",
             "🎯 DIVERGENCE-BASED PRECISION ENTRY SYSTEM:",
             "Distinguish between trend reversal (Regular) and trend continuation (Hidden) using Stochastic, RSI, MACD divergence.",
-            "- **Data Source:** Divergence signals are calculated on FILTER_TIMEFRAMES[1] (30m) timeframe for optimal balance.",
+            f"- **Data Source:** Divergence signals are calculated on {filter_str} timeframe for optimal balance.",
             "",
             "🔥 STOCHASTIC + RSI PARALLEL FILTER (False Breakout Prevention):",
             "- **Core Principle**: RSI measures 'speed' (momentum velocity), Stochastic measures 'position' (price location within recent range)",
@@ -256,7 +260,6 @@ class TemplateManager:
                 "- LEARN from closed trades: Why did stops get hit? Were entries premature? Was trend strength misjudged?",
                 "- IMPROVE win rate: Only trade when multiple factors align strongly (3+ timeframe alignment REQUIRED)",
                 "- AVOID repeated mistakes: If recent trades failed due to weak setups, demand stronger confirmation",
-                "- HOLD discipline: ONLY use HOLD when confidence < 30% (calculated from formula). If confidence >= 30%, you MUST choose BUY or SELL. NEVER use 40% for HOLD. Prefer trading over holding when ANY opportunity exists.",
                 "- UPDATE positions actively: Move SL to breakeven after 1:1 or 1.5:1 gain, trail stops on strong trends, adjust TP if momentum extends",
                 "- CLOSE proactively: Don't wait for SL if market structure breaks, trend reverses, or thesis invalidates",
                 "- ADAPT to performance: If win rate is low, increase entry standards and risk/reward requirements",
@@ -468,7 +471,7 @@ Step 3: Apply adjustments based on timeframe alignment:
 - 2 timeframes aligned: Keep base confidence (minimum 30%)
 - 3 timeframes aligned: Add +5% (minimum 55%)
 - 4+ timeframes aligned: Add +10% (minimum 60%)
-- Strong Trigger momentum (5m/15m volume spike + clear direction): Add +5-10% even if only 2 timeframes
+- Strong Trigger momentum (3m/15m volume spike + clear direction): Add +5-10% even if only 2 timeframes
 
 Step 4: Apply Filter wall penalties (only if very close):
 - {hard_wall_str} High/Low within 0.5%: Reduce by -5% (but don't go below 30% if other factors are strong)
@@ -485,12 +488,9 @@ Step 4.6: Apply Stochastic + RSI parallel filter:
 - Exception: Hidden Divergence + strong volume can override with explicit justification
 
 Step 5: Final confidence range:
-- If you have ANY valid setup (2+ timeframes OR strong Trigger): MINIMUM confidence = 30% (NOT 40%!)
-- If confidence >= 30%, you MUST choose BUY or SELL (NOT HOLD)
+- If you have ANY valid setup (2+ timeframes OR strong Trigger): MINIMUM confidence = 30%
 - Normal range: 42-85% (most trades should be 55-75%)
 - Exceptional setups only: 85-95%
-- HOLD is ONLY allowed when confidence < 30% (calculate using formula, do not arbitrarily use 40%)
-- ⚠️ NEVER use 40% for HOLD - if confidence is 40%, you MUST choose BUY or SELL
 
 **CALCULATION EXAMPLE**:
 - trend_alignment = 70, momentum_strength = 65, volume_support = 75, pattern_quality = 60, support_resistance_strength = 55
@@ -545,17 +545,14 @@ POSITION SIZING FORMULA (calculate before finalizing):
 
 TRADING SIGNALS & CONFIDENCE:
 - BUY (30-100 confidence): Multi-indicator confluence + volume confirmation + clear SL/TP + minimum 1.5:1 R/R + timeframe alignment
-  - 30-54%: 2 timeframes align OR strong Trigger momentum (5m/15m) with clear direction + 1 Filter neutral or supportive
+  - 30-54%: 2 timeframes align OR strong Trigger momentum (3m/15m) with clear direction + 1 Filter neutral or supportive
   - 55-59%: 2+ timeframes align with strong Trigger momentum OR 3 timeframes align but Filter wall caution
   - 60-70%: 3+ timeframes align with good momentum and no major Filter opposition
   - 70%+: 3+ timeframes align strongly with strong Trigger momentum and Filter support
 - SELL (30-100 confidence): Same criteria as BUY, reversed
-- HOLD (ONLY when confidence < 30% OR all 3 Filters strongly oppose AND no Trigger momentum exists): 
-  - ⚠️ CRITICAL: Do NOT use HOLD if you calculate confidence >= 30% based on the formula above
-  - ⚠️ CRITICAL: If confidence is 30-41%, you MUST choose either BUY or SELL (even if weak setup)
-  - Only use HOLD when: (1) confidence < 30% OR (2) ALL Filter timeframes ({filter_str}) strongly oppose AND no Trigger momentum exists
-  - If HOLD is chosen, confidence MUST be below 30% (not 40% or any other value)
-  - Prefer trading over holding when ANY opportunity exists (even 30-41% confidence is acceptable)
+- HOLD (ONLY when confidence < 30%): 
+  - Only use HOLD when confidence calculated from formula is below 30%
+  - If ALL Filter timeframes ({filter_str}) strongly oppose AND no Trigger momentum exists, confidence will naturally be < 30%
 - CLOSE: Exit position when SL/TP hit, signal reversal, or thesis invalidated
 - UPDATE: Adjust existing position SL/TP when market structure improves
 
@@ -696,18 +693,19 @@ Mandatory: All trades require stops based on technical levels (not arbitrary %),
         analysis_steps = f"""
 ANALYSIS STEPS (use findings to determine trading signal):
 
-🔥 PRIMARY PRINCIPLE: Analyze EXACTLY 100 candles provided for each timeframe [5m, 15m, 1h, 4h, 12h]
+🔥 PRIMARY PRINCIPLE: Analyze EXACTLY 100 candles provided for each timeframe [1m, 3m, 15m]
 DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d', '360d', '30d+', 'long-term (30d+)' or any long-term periods.
 
 🎯 TIMEFRAME ROLE UNDERSTANDING:
-- 5m/15m (TRIGGER): Determine entry/exit timing based on immediate momentum and volume spikes
-- 1h/4h/12h (FILTER): Establish trend direction and define RESTRICTED ZONES (prohibited entry areas)
+- 1m (TRIGGER): Determine entry/exit timing based on immediate momentum and volume spikes (Stochastic Golden Cross)
+- 3m (FILTER): Establish trend direction and define RESTRICTED ZONES (RSI oversold exit, EMA 20 above)
+- 15m (WALL): Primary S/R boundaries (EMA 20 slope for long/short market determination)
 - Filter timeframes set boundaries; Trigger timeframes find optimal execution within those boundaries
 
 1. MULTI-TIMEFRAME ASSESSMENT (Role-Based Analysis):
    {timeframe_desc}
    
-   **TRIGGER Assessment (5m/15m)**:
+   **TRIGGER Assessment (3m/15m)**:
    - Identify immediate momentum direction and volume spikes
    - Look for entry/exit signals based on short-term price action
    - Confirm if Trigger signals align with Filter direction
@@ -721,7 +719,7 @@ DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d
    **ALIGNMENT REQUIREMENT** (Flexible):
    - **MINIMUM**: 2+ timeframes aligned for 55%+ confidence (can be Trigger + 1 Filter, or 2 Filters + Trigger)
    - **PREFERRED**: 3+ timeframes aligned for 60%+ confidence (better setup)
-   - **STRONG TRIGGER EXCEPTION**: Very strong Trigger momentum (5m/15m volume spike + clear direction) can justify 55%+ confidence even with only 2 timeframes (Trigger + 1 Filter neutral or supportive)
+   - **STRONG TRIGGER EXCEPTION**: Very strong Trigger momentum (3m/15m volume spike + clear direction) can justify 55%+ confidence even with only 2 timeframes (Trigger + 1 Filter neutral or supportive)
    - If Filter wall is very close (0.5%): Cap confidence at 60% unless breakout confirmed
    - If Filter wall is close (0.5-1%): Cap confidence at 65%, but strong Trigger can override
 
@@ -866,11 +864,8 @@ DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d
    
    **STEP 5: Final confidence range**:
    - VALID setup (2+ timeframes OR strong Trigger): MINIMUM = 30%
-   - If confidence >= 30%, you MUST choose BUY or SELL (NOT HOLD)
    - Normal trades: 42-85% (most should be 55-75%)
    - Exceptional only: 85-95%
-   - HOLD is ONLY allowed when confidence < 30% (calculated from formula)
-   - ⚠️ NEVER use 40% for HOLD - if confidence is 40%, you MUST choose BUY or SELL
    
    **EXAMPLE CALCULATION**:
    Scores: trend=70, momentum=65, volume=75, pattern=60, s/r=55

@@ -130,8 +130,9 @@ class AnalysisEngine:
             raise ValueError("metrics_calculator is required - must be injected from app.py")
         if result_processor is None:
             raise ValueError("result_processor is required - must be injected from app.py")
-        if chart_generator is None:
-            raise ValueError("chart_generator is required - must be injected from app.py")
+        # chart_generator is optional - if None, chart generation will be disabled
+        # if chart_generator is None:
+        #     raise ValueError("chart_generator is required - must be injected from app.py")
 
         # Store injected components
         self.model_manager = model_manager
@@ -474,8 +475,12 @@ class AnalysisEngine:
             # Get technical history for RSI overlay (optional)
             technical_history = getattr(self.context, 'technical_history', None)
             
-            # Generate chart image using chart generator
+            # Generate chart image using chart generator (if enabled)
             # The chart_generator will automatically limit candles based on AI_CHART_CANDLE_LIMIT
+            if self.chart_generator is None:
+                self.logger.debug("Chart generation disabled - chart_generator is None")
+                return None
+                
             chart_image = self.chart_generator.create_chart_image(
                 ohlcv=self.context.ohlcv_candles,
                 technical_history=technical_history,
