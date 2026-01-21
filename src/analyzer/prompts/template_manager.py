@@ -2,7 +2,7 @@
 Template management for prompt building system.
 Handles system prompts, response templates, and analysis steps for TRADING DECISIONS.
 
-Optimized for: Exactly 100 candles per timeframe [1m, 3m, 15m]
+Optimized for: Exactly 100 candles per timeframe [1m, 5m, 15m]
 Core Philosophy: High-probability momentum alignment with realistic S/R based on actual data
 """
 
@@ -15,19 +15,19 @@ class TemplateManager:
     """Manages prompt templates, system prompts, and analysis steps for trading decisions.
     
     Data Specification:
-    - Exactly 100 candles are provided for each timeframe: [1m, 3m, 15m]
+    - Exactly 100 candles are provided for each timeframe: [1m, 5m, 15m]
     - 15m timeframe with 100 candles = approximately 1.04 days (macro context)
     - All temporal illusions (365d, 360d, 30d+ mentions) are removed
-    - Timeframe roles: 1m = Trigger (entry/exit), 3m = Filter (trend/restriction), 15m = Wall (S/R boundaries)
+    - Timeframe roles: 1m = Trigger (entry/exit), 5m = Filter (trend/restriction), 15m = Wall (S/R boundaries)
     """
     
-    # 🔥 CENTRAL TIMEFRAME CONFIGURATION - [1m, 3m, 15m]
+    # 🔥 CENTRAL TIMEFRAME CONFIGURATION - [1m, 5m, 15m]
     # Day Trading Strategy:
     # - 15m (Wall): EMA 20 기울기로 롱/숏 장 판단 (Primary S/R boundaries)
-    # - 3m (Filter): RSI 과매도(30 이하) 탈출 또는 EMA 20 위 안착 시 '준비' 신호 (Trend/restriction)
+    # - 5m (Filter): RSI 과매도(30 이하) 탈출 또는 EMA 20 위 안착 시 '준비' 신호 (Trend/restriction)
     # - 1m (Trigger): 스토캐스틱 골든크로스 발생 시 즉시 진입, 전저점 기준 손절가 (Entry/exit timing)
-    TIMEFRAMES: List[str] = ["3m", "15m", "1h"]
-    TRIGGER_TIMEFRAMES: List[str] = ["3m"]  # Entry/exit timing (Stochastic Golden Cross)
+    TIMEFRAMES: List[str] = ["5m", "15m", "1h"]
+    TRIGGER_TIMEFRAMES: List[str] = ["5m"]  # Entry/exit timing (Stochastic Golden Cross)
     FILTER_TIMEFRAMES: List[str] = ["15m"]  # Trend/restriction (RSI oversold exit, EMA 20 above)
     HARD_WALL_TIMEFRAMES: List[str] = ["1h"]  # Primary S/R boundaries (EMA 20 slope for long/short market)
     MACRO_TIMEFRAME: str = "1h"  # Macro context definition (EMA 20 slope)
@@ -64,7 +64,7 @@ class TemplateManager:
         
         Args:
             symbol: Trading symbol (e.g., "BTC/USDT")
-            timeframe: Timeframe for analysis (e.g., "1m", "3m", "15m")
+            timeframe: Timeframe for analysis (e.g., "1m", "5m", "15m")
             has_chart_image: Whether a chart image is being provided for visual analysis
             previous_response: Previous AI response for context continuity
             position_context: Current position details and unrealized P&L
@@ -97,10 +97,33 @@ class TemplateManager:
             f"- **Agent B (Conservative):** Focuses on {filter_str} (FILTER) S/R walls. Prioritizes capital preservation and risk of reversal at major boundaries.",
             "- **Referee:** Finalizes the decision based on Confluence Scoring and R/R Ratio.",
             "",
-            "## 3. Support/Resistance \"Wall\" Rules",
+            "## 3. Support/Resistance \"Wall\" Rules (🔥 TREND FOLLOWING STRATEGY)",
             f"- **Hard Walls:** {hard_wall_str} EMA 20 기울기로 롱/숏 장 판단 (기울기 양수 = 롱 장, 기울기 음수 = 숏 장).",
-            f"- **Filter:** {filter_str} RSI 과매도(30 이하) 탈출 또는 EMA 20 위 안착 시 '준비' 신호.",
-            f"- **Trigger:** {trigger_str} 스토캐스틱 골든크로스 발생 시 즉시 진입, 전저점 기준 손절가.",
+            f"- **Filter:** {filter_str} EMA 20 위에서 지속 상승 + RSI 40~60 (건강한 상승) 확인 시 '추세 지속' 신호.",
+            f"- **Trigger:** {trigger_str} Stochastic 50~80 (상승 모멘텀 유지) + EMA 20 위에서 계속 상승 시 진입.",
+            "",
+            "🔥 MARKET REGIME ANALYSIS (Your Judgment - No ADX Available):",
+            "- **Your Task**: Determine if the market is trending or ranging using available indicators:",
+            "  - **EMA Slope Analysis**:",
+            "    * Strong upward EMA slope (1h) + consistent direction = Strong uptrend",
+            "    * Strong downward EMA slope (1h) + consistent direction = Strong downtrend",
+            "    * Flat or choppy EMA slope (frequent direction changes) = Ranging market",
+            "  - **RSI Pattern Analysis**:",
+            "    * RSI oscillating between 40-60 with consistent trend = Healthy trend",
+            "    * RSI bouncing between 30-70 without clear direction = Ranging market",
+            "    * RSI stuck in extreme zones (20-30 or 70-80) = Potential ranging/exhaustion",
+            "  - **Stochastic Pattern Analysis**:",
+            "    * Stochastic maintaining 50-80 (uptrend) or 20-50 (downtrend) = Strong trend",
+            "    * Stochastic bouncing randomly without clear zone = Ranging market",
+            "  - **Price Action Analysis**:",
+            "    * Higher highs + Higher lows = Uptrend",
+            "    * Lower highs + Lower lows = Downtrend",
+            "    * Similar highs and lows (sideways movement) = Ranging market",
+            "  - **Volume Analysis**:",
+            "    * Consistent volume with trend direction = Strong trend",
+            "    * Low or erratic volume = Potential ranging market",
+            "- **Decision Making**: If you determine the market is ranging (choppy EMA slope + oscillating RSI/Stochastic + sideways price action + low volume), you may choose to HOLD or reduce confidence.",
+            "- **No Hard Rules**: Use your judgment based on all available indicators. A ranging market might still offer opportunities if other factors align strongly (e.g., strong volume breakout, clear support/resistance bounce).",
             "",
             "## 4. Confidence Calculation Formula (Deterministic)",
             "You must calculate confidence using this weighted formula:",
@@ -185,29 +208,44 @@ class TemplateManager:
             "  - Bullish Regular: Price lower low + Indicator higher low → Potential upward reversal (⚠️ downtrend exhaustion)",
             "  - Bearish Regular: Price higher high + Indicator lower high → Potential downward reversal (⚠️ uptrend exhaustion)",
             "  - Use Case: Exit existing position or counter-trend entry (RISKY - require 70%+ confidence)",
-            "- **Hidden Divergence (Trend Continuation - Buy the Dip/Sell the Rally):",
-            "  - Hidden Bullish: Price higher low + Indicator lower low → Uptrend pullback, BUY THE DIP (✅ HIGH PRIORITY)",
-            "  - Hidden Bearish: Price lower high + Indicator higher high → Downtrend bounce, SELL THE RALLY (✅ HIGH PRIORITY)",
-            "  - Use Case: Best entry points for trend-following trades",
+            "- **Hidden Divergence (Trend Continuation - Follow the Trend):",
+            "  - Hidden Bullish: Price higher low + Indicator lower low → Trend continuation, FOLLOW THE TREND (✅ HIGH PRIORITY)",
+            "  - Hidden Bearish: Price lower high + Indicator higher high → Trend continuation, FOLLOW THE TREND (✅ HIGH PRIORITY)",
+            "  - **Key Difference**: Enter when RSI 40~60 (healthy trend), NOT when RSI < 30 (oversold pullback)",
+            "  - Use Case: Best entry points for trend-following trades (trend continuation, not pullback entry)",
             "",
-            "🔥 STRATEGIC ENTRY SCENARIOS (MUST FOLLOW):",
+            "🔥 TREND FOLLOWING STRATEGY - ENTRY SCENARIOS (MUST FOLLOW):",
+            "**Core Principle:** Enter in the direction of the trend, not waiting for pullbacks.",
+            "",
             "**LONG Entry Priority (Ranked):**",
-            "  1. ✅ HIGHEST: BB Trend 'above_middle' + Hidden Bullish Divergence + Stoch Golden Cross near 20 (Confidence: 75-85%)",
-            "  2. ✅ HIGH: BB Trend 'above_middle' + Hidden Bullish Divergence (no cross yet) (Confidence: 65-75%)",
-            "  3. ⚠️ MEDIUM: Hidden Bullish Divergence alone + Volume confirmation (Confidence: 55-65%)",
-            "  4. ⚠️ LOW: Regular Bullish Divergence (reversal signal, needs strong confirmation) (Confidence: 45-55%)",
+            "  1. ✅ HIGHEST: 1h EMA 20 기울기 양수 (상승 추세) + 15m EMA 20 위 + RSI 40~60 + Stochastic 50~80 + Consistent price action (HH/HL) (Confidence: 70-80%)",
+            "  2. ✅ HIGH: 1h EMA 20 기울기 양수 + 15m EMA 20 위 + RSI 50~70 (건강한 상승) + Strong trend indicators (Confidence: 60-70%)",
+            "  3. ⚠️ MEDIUM: 1h EMA 20 기울기 양수 + 15m EMA 20 위 + Stochastic 50~80 + Moderate trend strength (Confidence: 50-60%)",
             "",
             "**🚫 LONG Entry BLOCKED if**:",
+            "  - 1h EMA 20 기울기 음수 (하락 추세) → 추세 방향과 반대, REJECT",
+            "  - RSI < 30 (과매도) → 조정 중, 추세 추종이 아님, REJECT",
+            "  - RSI > 80 (과매수) → 과열 구간, 진입 자제, -10% confidence penalty",
             "  - RSI > 80 AND Stochastic > 80 (both extreme overbought) → Worst timing, REJECT or -15% confidence penalty",
             "",
+            "**⚠️ LONG Entry CAUTION (Your Judgment)**:",
+            "  - Weak trend indicators (choppy EMA slope + oscillating RSI/Stochastic + sideways price action) → Consider reducing confidence or HOLD",
+            "  - Ranging market indicators → Use your judgment based on all available data",
+            "",
             "**SHORT Entry Priority (Ranked):**",
-            "  1. ✅ HIGHEST: BB Trend 'below_middle' + Hidden Bearish Divergence + Stoch Death Cross near 80 (Confidence: 75-85%)",
-            "  2. ✅ HIGH: BB Trend 'below_middle' + Hidden Bearish Divergence (no cross yet) (Confidence: 65-75%)",
-            "  3. ⚠️ MEDIUM: Hidden Bearish Divergence alone + Volume confirmation (Confidence: 55-65%)",
-            "  4. ⚠️ LOW: Regular Bearish Divergence (reversal signal, needs strong confirmation) (Confidence: 45-55%)",
+            "  1. ✅ HIGHEST: 1h EMA 20 기울기 음수 (하락 추세) + 15m EMA 20 아래 + RSI 40~60 + Stochastic 20~50 + Consistent price action (LH/LL) (Confidence: 70-80%)",
+            "  2. ✅ HIGH: 1h EMA 20 기울기 음수 + 15m EMA 20 아래 + RSI 30~50 (건강한 하락) + Strong trend indicators (Confidence: 60-70%)",
+            "  3. ⚠️ MEDIUM: 1h EMA 20 기울기 음수 + 15m EMA 20 아래 + Stochastic 20~50 + Moderate trend strength (Confidence: 50-60%)",
             "",
             "**🚫 SHORT Entry BLOCKED if**:",
+            "  - 1h EMA 20 기울기 양수 (상승 추세) → 추세 방향과 반대, REJECT",
+            "  - RSI > 70 (과매수) → 조정 중, 추세 추종이 아님, REJECT",
+            "  - RSI < 20 (과매도) → 과열 구간, 진입 자제, -10% confidence penalty",
             "  - RSI < 20 AND Stochastic < 20 (both extreme oversold) → Worst timing, REJECT or -15% confidence penalty",
+            "",
+            "**⚠️ SHORT Entry CAUTION (Your Judgment)**:",
+            "  - Weak trend indicators (choppy EMA slope + oscillating RSI/Stochastic + sideways price action) → Consider reducing confidence or HOLD",
+            "  - Ranging market indicators → Use your judgment based on all available data",
             "",
             "📈 DIVERGENCE CROSS-VALIDATION:",
             "- **Triple Confirmation (Strongest):** Stochastic + RSI + MACD all show same divergence → Add +15% confidence",
@@ -471,7 +509,7 @@ Step 3: Apply adjustments based on timeframe alignment:
 - 2 timeframes aligned: Keep base confidence (minimum 30%)
 - 3 timeframes aligned: Add +5% (minimum 55%)
 - 4+ timeframes aligned: Add +10% (minimum 60%)
-- Strong Trigger momentum (3m/15m volume spike + clear direction): Add +5-10% even if only 2 timeframes
+- Strong Trigger momentum (5m/15m volume spike + clear direction): Add +5-10% even if only 2 timeframes
 
 Step 4: Apply Filter wall penalties (only if very close):
 - {hard_wall_str} High/Low within 0.5%: Reduce by -5% (but don't go below 30% if other factors are strong)
@@ -505,11 +543,10 @@ CRITICAL: Provide EXACTLY ONE signal. Never say "CLOSE then HOLD" or "BUY follow
 === TREND STRENGTH GUIDELINES (Advisory - You Decide) ===
 These are GUIDELINES, not hard rules. Use your judgment based on overall confluence.
 
-ADX + CHOPPINESS ASSESSMENT:
-- ADX < 20 AND Choppiness > 50: ⚠️ CAUTION - Weak trend + choppy market. Requires 4+ strong confluences to trade.
-- ADX < 20 but Choppiness < 50: Potential trend emerging (ADX lags). Trade allowed with strong confirmation.
-- ADX 20-25: Developing trend. Standard 3+ confluences required.
-- ADX > 25: Strong trend environment. Full confidence range available.
+TREND STRENGTH ASSESSMENT (No ADX Available - Use Other Indicators):
+- Weak trend indicators (choppy EMA slope + Choppiness > 50 + oscillating RSI/Stochastic): ⚠️ CAUTION - Weak trend + choppy market. Requires 4+ strong confluences to trade.
+- Developing trend indicators (moderate EMA slope + Choppiness 30-50 + consistent RSI/Stochastic): Potential trend emerging. Trade allowed with strong confirmation.
+- Strong trend indicators (consistent EMA slope + Choppiness < 30 + RSI/Stochastic in trend zone): Strong trend environment. Full confidence range available.
 
 CHOPPINESS INDEX CONTEXT (Market Efficiency Indicator):
 - **Choppiness > 61.8: Ranging/Choppy Market** ⚠️
@@ -539,13 +576,13 @@ POSITION SIZING FORMULA (calculate before finalizing):
 - Base size = confidence / 100 (e.g., 75 confidence = 0.75 base)
 - If timeframe_alignment = "MIXED": reduce by 0.20 (e.g., 0.75 - 0.20 = 0.55)
 - If timeframe_alignment = "DIVERGENT": reduce by 0.35 (e.g., 0.75 - 0.35 = 0.40)
-- In weak trend environments (ADX < 20): consider smaller sizes
+- In weak trend environments (choppy EMA slope + oscillating indicators): consider smaller sizes
 - Near Filter walls ({hard_wall_str} High/Low within 1-2%): reduce by additional 0.15
 - Final position_size = max(0.10, calculated_value)
 
 TRADING SIGNALS & CONFIDENCE:
 - BUY (30-100 confidence): Multi-indicator confluence + volume confirmation + clear SL/TP + minimum 1.5:1 R/R + timeframe alignment
-  - 30-54%: 2 timeframes align OR strong Trigger momentum (3m/15m) with clear direction + 1 Filter neutral or supportive
+  - 30-54%: 2 timeframes align OR strong Trigger momentum (5m/15m) with clear direction + 1 Filter neutral or supportive
   - 55-59%: 2+ timeframes align with strong Trigger momentum OR 3 timeframes align but Filter wall caution
   - 60-70%: 3+ timeframes align with good momentum and no major Filter opposition
   - 70%+: 3+ timeframes align strongly with strong Trigger momentum and Filter support
@@ -693,19 +730,19 @@ Mandatory: All trades require stops based on technical levels (not arbitrary %),
         analysis_steps = f"""
 ANALYSIS STEPS (use findings to determine trading signal):
 
-🔥 PRIMARY PRINCIPLE: Analyze EXACTLY 100 candles provided for each timeframe [1m, 3m, 15m]
+🔥 PRIMARY PRINCIPLE: Analyze EXACTLY 100 candles provided for each timeframe [1m, 5m, 15m]
 DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d', '360d', '30d+', 'long-term (30d+)' or any long-term periods.
 
 🎯 TIMEFRAME ROLE UNDERSTANDING:
 - 1m (TRIGGER): Determine entry/exit timing based on immediate momentum and volume spikes (Stochastic Golden Cross)
-- 3m (FILTER): Establish trend direction and define RESTRICTED ZONES (RSI oversold exit, EMA 20 above)
+- 5m (FILTER): Establish trend direction and define RESTRICTED ZONES (RSI oversold exit, EMA 20 above)
 - 15m (WALL): Primary S/R boundaries (EMA 20 slope for long/short market determination)
 - Filter timeframes set boundaries; Trigger timeframes find optimal execution within those boundaries
 
 1. MULTI-TIMEFRAME ASSESSMENT (Role-Based Analysis):
    {timeframe_desc}
    
-   **TRIGGER Assessment (3m/15m)**:
+   **TRIGGER Assessment (5m/15m)**:
    - Identify immediate momentum direction and volume spikes
    - Look for entry/exit signals based on short-term price action
    - Confirm if Trigger signals align with Filter direction
@@ -719,12 +756,12 @@ DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d
    **ALIGNMENT REQUIREMENT** (Flexible):
    - **MINIMUM**: 2+ timeframes aligned for 55%+ confidence (can be Trigger + 1 Filter, or 2 Filters + Trigger)
    - **PREFERRED**: 3+ timeframes aligned for 60%+ confidence (better setup)
-   - **STRONG TRIGGER EXCEPTION**: Very strong Trigger momentum (3m/15m volume spike + clear direction) can justify 55%+ confidence even with only 2 timeframes (Trigger + 1 Filter neutral or supportive)
+   - **STRONG TRIGGER EXCEPTION**: Very strong Trigger momentum (5m/15m volume spike + clear direction) can justify 55%+ confidence even with only 2 timeframes (Trigger + 1 Filter neutral or supportive)
    - If Filter wall is very close (0.5%): Cap confidence at 60% unless breakout confirmed
    - If Filter wall is close (0.5-1%): Cap confidence at 65%, but strong Trigger can override
 
 2. TECHNICAL INDICATORS:
-   Momentum: RSI (<30/>70), MACD (crosses, histogram) | Trend: ADX (>25), DI+/DI- | Volatility: ATR, Bollinger Bands, Choppiness Index | Volume: MFI, OBV, Force Index, VWAP, Volume Profile | SMAs: 20/50/200 crosses | Advanced: TSI, Vortex, PFE, RMI, Ultimate, Supertrend | Assess confluence (strong) vs divergence (weak)
+   Momentum: RSI (<30/>70), MACD (crosses, histogram) | Trend: EMA slope (1h/15m), Price action (HH/HL for uptrend, LH/LL for downtrend), Choppiness Index | Volatility: ATR, Bollinger Bands, Choppiness Index | Volume: MFI, OBV, Force Index, VWAP, Volume Profile | SMAs: 20/50/200 crosses | Advanced: TSI, Vortex, PFE, RMI, Ultimate, Supertrend | Assess confluence (strong) vs divergence (weak)
    
    **🔥 CRITICAL: STOCHASTIC + RSI PARALLEL CHECK** (Before ANY entry decision):
    - **For LONG**: Check if RSI > 80 AND Stochastic > 80 → If YES, REJECT or apply -15% confidence penalty
@@ -825,7 +862,7 @@ DO NOT reference data beyond the 100 candles per timeframe. DO NOT mention '365d
             analysis_steps += f"""
 
 {step_number}. CHART PATTERN ANALYSIS (~{cfg_limit} candles):
-   Swing structure: Identify HH/HL (uptrend) vs LH/LL (downtrend) sequence from price peaks/troughs within 100-candle scope | Visual patterns: H&S, double tops/bottoms, wedges, triangles, flags/pennants, S/R breakouts | Report only clear, well-formed patterns (3-5% range, 20-30+ candles for major patterns) | If ambiguous, state "No clear patterns detected" | Candlestick formations: doji, hammer, shooting star, engulfing | S/R levels: horizontal zones within 100-candle High/Low box, trend lines, channels | Validate patterns against ADX (>25), volume spikes, RSI/MACD alignment"""
+   Swing structure: Identify HH/HL (uptrend) vs LH/LL (downtrend) sequence from price peaks/troughs within 100-candle scope | Visual patterns: H&S, double tops/bottoms, wedges, triangles, flags/pennants, S/R breakouts | Report only clear, well-formed patterns (3-5% range, 20-30+ candles for major patterns) | If ambiguous, state "No clear patterns detected" | Candlestick formations: doji, hammer, shooting star, engulfing | S/R levels: horizontal zones within 100-candle High/Low box, trend lines, channels | Validate patterns against trend strength (EMA slope consistency, price action structure), volume spikes, RSI/MACD alignment"""
             step_number += 1
         
         analysis_steps += f"""
